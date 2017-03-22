@@ -32,6 +32,9 @@
 
 // -----------------------------------------------------------------------------
 
+void printUsage (const char* argv[]);
+void printUsageAndExit (const char* argv[]);
+
 void printColor (const char* color, const char* format, ...);
 void printSubtitle (const char* format, ...);
 void printTitle (const char* format, ...);
