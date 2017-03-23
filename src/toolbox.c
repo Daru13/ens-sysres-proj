@@ -3,7 +3,30 @@
 #include <string.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <errno.h>
 #include "toolbox.h"
+
+// -----------------------------------------------------------------------------
+// ERROR HANDLING
+// -----------------------------------------------------------------------------
+
+// errno is saved at the beginning, and restored + returned in the end
+int handleError (const char* message)
+{
+    int errno_copy = errno;
+
+    printError("\n/!\\ An error occured!");
+    perror(message);
+
+    errno = errno_copy;
+    return errno_copy;
+}
+
+void handleErrorAndExit (const char* message)
+{
+    handleError(message);
+    exit(EXIT_FAILURE);
+}
 
 // -----------------------------------------------------------------------------
 // USAGE-RELATED FUNCTIONS
@@ -18,7 +41,7 @@ void printUsage (const char* argv[])
 void printUsageAndExit (const char* argv[])
 {
     printUsage(argv);
-    exit(1);
+    exit(EXIT_FAILURE);
 }
 
 // -----------------------------------------------------------------------------

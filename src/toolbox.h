@@ -32,6 +32,9 @@
 
 // -----------------------------------------------------------------------------
 
+int handleError (const char* message);
+void handleErrorAndExit (const char* message);
+
 void printUsage (const char* argv[]);
 void printUsageAndExit (const char* argv[]);
 
