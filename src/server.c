@@ -66,7 +66,62 @@ int acceptWebSocket (const int sockfd, struct sockaddr* address)
 
     int clientfd = accept(sockfd, address, &address_length);
     if (clientfd < 0)
-        handleErrorAndExit("listen() failed");
+        handleErrorAndExit("accept() failed");
+
+    return clientfd;
+}
+
+// -----------------------------------------------------------------------------
+// SERVER-RELATED STRUCTURE(S) HANDLING
+// -----------------------------------------------------------------------------
+
+// Noet that this function does not initialize everything;
+// It should always be followed by a call to initServer()!
+Server* createServer ()
+{
+    Server* new_server = malloc(sizeof(Server));
+    if (new_server == NULL)
+        handleErrorAndExit("malloc() failed in createServer()");
+
+    return new_server;
+}
+
+void deleteServer (Server* server)
+{
+    free(server);
+}
+
+void initServer (Server* server, const int sockfd, const struct sockaddr address,
+                 const ServParameters parameters)
+{
+    server->sockfd     = sockfd;
+    server->address    = address;
+    server->parameters = parameters;
+}
+
+// Initialize a server with default values
+void defaultInitServer (Server* server)
+{
+    int                sockfd  = createWebSocket();
+    struct sockaddr_in address = getLocalAddress(SERV_DEFAULT_PORT);
+
+    ServParameters parameters;
+    parameters.queue_max_length = SERV_DEFAULT_QUEUE_MAX_LENGTH;
+
+
+    // TODO: fix the cast issue...
+    initServer(server, sockfd, (struct sockaddr) address, parameters);
+}
+
+// -----------------------------------------------------------------------------
+// MAIN FUNCTIONS: INIT, WAITING, CONNECTING, LOOPING AND READING
+// -----------------------------------------------------------------------------
+
+// Return the client-communication socket descriptor, and fill the structure
+// client_adress with the right values (as accept() do)
+int waitForClient (Server* server, struct sockaddr* client_address)
+{
+    int clientfd = acceptWebSocket(server->sockfd, client_address);
 
     return clientfd;
 }
