@@ -32,6 +32,13 @@
 
 // -----------------------------------------------------------------------------
 
+// Useful, general-purpose macros
+#define MIN(x, y) ((x) > (y) ? (y) : (x))
+#define MAX(x, y) ((x) < (y) ? (y) : (x))
+
+// -----------------------------------------------------------------------------
+
+
 int handleError (const char* message);
 void handleErrorAndExit (const char* message);
 

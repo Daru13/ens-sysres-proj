@@ -1,8 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <netinet/in.h>
 #include "toolbox.h"
 #include "server.h"
@@ -46,9 +49,9 @@ struct sockaddr_in getLocalAddress (const int port)
     return address;
 }
 
-void bindWebSocket (const int sockfd, const struct sockaddr *address)
+void bindWebSocket (const int sockfd, const struct sockaddr_in *address)
 {
-    int return_value = bind(sockfd, address, sizeof address);
+    int return_value = bind(sockfd, (struct sockaddr*) address, sizeof address);
     if (return_value < 0)
         handleErrorAndExit("bind() failed");
 }
@@ -60,11 +63,11 @@ void listenWebSocket (const int sockfd, const int queue_max_length)
         handleErrorAndExit("listen() failed");
 }
 
-int acceptWebSocket (const int sockfd, struct sockaddr* address)
+int acceptWebSocket (const int sockfd, struct sockaddr_in* address)
 {
     socklen_t address_length = sizeof address;
 
-    int clientfd = accept(sockfd, address, &address_length);
+    int clientfd = accept(sockfd, (struct sockaddr*) address, &address_length);
     if (clientfd < 0)
         handleErrorAndExit("accept() failed");
 
@@ -91,12 +94,15 @@ void deleteServer (Server* server)
     free(server);
 }
 
-void initServer (Server* server, const int sockfd, const struct sockaddr address,
+void initServer (Server* server, const int sockfd, const struct sockaddr_in address,
                  const ServParameters parameters)
 {
     server->sockfd     = sockfd;
     server->address    = address;
     server->parameters = parameters;
+
+    // When initialized, the server is considered non-active
+    server->is_started = false;
 }
 
 // Initialize a server with default values
@@ -110,19 +116,105 @@ void defaultInitServer (Server* server)
 
 
     // TODO: fix the cast issue...
-    initServer(server, sockfd, (struct sockaddr) address, parameters);
+    initServer(server, sockfd, /*(struct sockaddr)*/ address, parameters);
+}
+
+bool serverIsStarted (Server* server)
+{
+    return server->is_started;
 }
 
 // -----------------------------------------------------------------------------
 // MAIN FUNCTIONS: INIT, WAITING, CONNECTING, LOOPING AND READING
 // -----------------------------------------------------------------------------
 
+// Once a server is created and initialized, this must be called in order
+// to make it active (i.e. listening for requests and waiting for clients)
+void startServer (Server* server)
+{
+    // Attach the local adress to the socket, and make it a listener
+    bindWebSocket(server->sockfd, &server->address);
+    listenWebSocket(server->sockfd, server->parameters.queue_max_length);
+
+    // Once started, update the internal state of the server
+    server->is_started = true;
+}
+
 // Return the client-communication socket descriptor, and fill the structure
 // client_adress with the right values (as accept() do)
-int waitForClient (Server* server, struct sockaddr* client_address)
+int waitForClient (Server* server, struct sockaddr_in* client_address)
 {
+    if (! serverIsStarted(server))
+        handleErrorAndExit("waitForClient() failed: server is not started");
+
     int clientfd = acceptWebSocket(server->sockfd, client_address);
 
     return clientfd;
 }
 
+// This function assumes the server is initialized and started
+void handleClientRequests (Server* server)
+{
+    if (! serverIsStarted(server))
+        handleErrorAndExit("handleClientRequests() failed: server is not started");
+
+    // TODO: change this...
+    int clientfd = FD_NO_CLIENT;
+    int max_fd;
+
+    // Indefinitely loop, waiting for new clients OR requests
+    // To this aim, a list of file descriptors to wait for is used,
+    // thanks to select()
+    fd_set read_fds, write_fds;
+    struct timeval timeout;
+
+    char buffer[512 + 1];
+
+    struct sockaddr_in client_address;
+
+    for (;;)
+    {
+        // Always scan for the socket listening for new clients
+        // Also scan for the possible client (scanned_fds is modified each time)
+
+        // TODO: generalize this, use poll()?
+        FD_ZERO(&read_fds);
+        FD_ZERO(&write_fds);       
+
+        FD_SET(server->sockfd, &read_fds);
+        max_fd = server->sockfd;
+
+        if (clientfd != FD_NO_CLIENT)
+        {
+            FD_SET(clientfd, &read_fds);
+            max_fd = MAX(max_fd, clientfd);
+        }   
+
+        // Set up the timeout value (modified each time too); infinite time here
+        timeout.tv_sec  = -1;
+        timeout.tv_usec = -1;
+
+        int ready_fd = select(max_fd, &read_fds, &write_fds, NULL, NULL);
+        if (ready_fd < 1)
+            handleErrorAndExit("select() failed");
+
+        printf("File descriptor %d is ready!\n", ready_fd);
+        
+        if (ready_fd == server->sockfd)
+        {
+            clientfd = waitForClient(server, &client_address);
+            printf("New client (fd = %d) hs been accepted.\n", clientfd);
+        } 
+        else
+        {
+            // If it is a client, read from it
+            printf("Reading up to 512 bytes from client %d...\n", clientfd);
+            
+            int nb_bytes_read = read(ready_fd, &buffer, 512);
+            buffer[nb_bytes_read] = '\0';
+
+            printf("***** Buffer content below *****\n");
+            printf("%s\n", buffer);
+        }
+    }  
+}
