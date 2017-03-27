@@ -56,7 +56,7 @@ void bindWebSocket (const int sockfd, const struct sockaddr_in *address)
     printf("sockfd: %d\nport: %d\naddr_ip: %d (%d)\naddr_family: %d (AF_INET = %d)\n",
             sockfd, ntohs(address->sin_port), address->sin_addr.s_addr, INADDR_ANY, address->sin_family, AF_INET);
 */
-    int return_value = bind(sockfd, (struct sockaddr*) address, sizeof(struct sockaddr_in));
+    int return_value = bind(sockfd, (const struct sockaddr*) address, sizeof(struct sockaddr_in));
     if (return_value < 0)
         handleErrorAndExit("bind() failed");
 }
@@ -122,7 +122,7 @@ void defaultInitServer (Server* server)
     initServer(server, sockfd, address, parameters);
 }
 
-bool serverIsStarted (Server* server)
+bool serverIsStarted (const Server* server)
 {
     return server->is_started;
 }
@@ -135,7 +135,10 @@ bool serverIsStarted (Server* server)
 // to make it active (i.e. listening for requests and waiting for clients)
 void startServer (Server* server)
 {
-    // Attach the local adress to the socket, and make it a listener
+    if (serverIsStarted(server))
+        handleErrorAndExit("startServer() failed: server is already started");
+
+   // Attach the local adress to the socket, and make it a listener
     bindWebSocket(server->sockfd, &server->address);
     listenWebSocket(server->sockfd, server->parameters.queue_max_length);
 
