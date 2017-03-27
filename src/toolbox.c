@@ -15,7 +15,7 @@ int handleError (const char* message)
 {
     int errno_copy = errno;
 
-    printError("\n/!\\ An error occured!");
+    printError("An error occured!");
     perror(message);
 
     errno = errno_copy;

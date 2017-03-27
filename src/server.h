@@ -25,7 +25,7 @@ typedef struct Server {
 
 // -----------------------------------------------------------------------------
 
-// Defautl values concerning the server
+// Default values concerning the server
 #define SERV_DEFAULT_PORT 			  4242
 #define SERV_DEFAULT_QUEUE_MAX_LENGTH 5
 
@@ -33,7 +33,6 @@ typedef struct Server {
 #define FD_NO_CLIENT -1
 
 // -----------------------------------------------------------------------------
-
 
 int createWebSocket ();
 // void connectWebSocket (const int sockfd, const struct sockaddr *address);

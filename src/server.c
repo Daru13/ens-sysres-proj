@@ -51,7 +51,12 @@ struct sockaddr_in getLocalAddress (const int port)
 
 void bindWebSocket (const int sockfd, const struct sockaddr_in *address)
 {
-    int return_value = bind(sockfd, (struct sockaddr*) address, sizeof address);
+/*
+    printf("In bindWebScoket:\n");
+    printf("sockfd: %d\nport: %d\naddr_ip: %d (%d)\naddr_family: %d (AF_INET = %d)\n",
+            sockfd, ntohs(address->sin_port), address->sin_addr.s_addr, INADDR_ANY, address->sin_family, AF_INET);
+*/
+    int return_value = bind(sockfd, (struct sockaddr*) address, sizeof(struct sockaddr_in));
     if (return_value < 0)
         handleErrorAndExit("bind() failed");
 }
@@ -114,9 +119,7 @@ void defaultInitServer (Server* server)
     ServParameters parameters;
     parameters.queue_max_length = SERV_DEFAULT_QUEUE_MAX_LENGTH;
 
-
-    // TODO: fix the cast issue...
-    initServer(server, sockfd, /*(struct sockaddr)*/ address, parameters);
+    initServer(server, sockfd, address, parameters);
 }
 
 bool serverIsStarted (Server* server)
@@ -182,38 +185,44 @@ void handleClientRequests (Server* server)
         FD_ZERO(&write_fds);       
 
         FD_SET(server->sockfd, &read_fds);
-        max_fd = server->sockfd;
+        max_fd = server->sockfd + 1;
 
         if (clientfd != FD_NO_CLIENT)
         {
             FD_SET(clientfd, &read_fds);
-            max_fd = MAX(max_fd, clientfd);
+            max_fd = MAX(max_fd, clientfd) + 1;
         }   
 
         // Set up the timeout value (modified each time too); infinite time here
         timeout.tv_sec  = -1;
         timeout.tv_usec = -1;
 
+        printf("Before select(): sockfd = %d, clientfd = %d\n", server->sockfd, clientfd);
+
         int ready_fd = select(max_fd, &read_fds, &write_fds, NULL, NULL);
-        if (ready_fd < 1)
+        if (ready_fd < 0)
             handleErrorAndExit("select() failed");
 
-        printf("File descriptor %d is ready!\n", ready_fd);
-        
-        if (ready_fd == server->sockfd)
+        printf("%d file descriptor(s) is(are) ready!\n", ready_fd);
+
+        // If sockfd is ready, accept a new client
+        if (FD_ISSET(server->sockfd, &read_fds))
         {
             clientfd = waitForClient(server, &client_address);
             printf("New client (fd = %d) hs been accepted.\n", clientfd);
-        } 
-        else
+        }
+
+        // Wait for a current client's input
+        if (clientfd != FD_NO_CLIENT
+        &&  FD_ISSET(clientfd, &read_fds))        
         {
             // If it is a client, read from it
             printf("Reading up to 512 bytes from client %d...\n", clientfd);
             
-            int nb_bytes_read = read(ready_fd, &buffer, 512);
+            int nb_bytes_read = read(clientfd, &buffer, 512);
             buffer[nb_bytes_read] = '\0';
 
-            printf("***** Buffer content below *****\n");
+            printf("***** Buffer content below (%d bytes) *****\n", nb_bytes_read);
             printf("%s\n", buffer);
         }
     }  
