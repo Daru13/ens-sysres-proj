@@ -83,6 +83,28 @@ int acceptWebSocket (const int sockfd, struct sockaddr_in* address)
 // SERVER-RELATED STRUCTURE(S) HANDLING
 // -----------------------------------------------------------------------------
 
+Client* createClient ()
+{
+    Client* new_client = malloc(sizeof(Client));
+    if (new_client == NULL)
+        handleErrorAndExit("malloc() failed in createClient()");
+
+    return new_client;
+}
+
+void deleteClient (Client* client)
+{
+    free(client);
+}
+
+void initClient (Client* client, const int fd, const struct sockaddr_in address)
+{
+    client->fd      = fd;
+    client->address = address;
+}
+
+// -----------------------------------------------------------------------------
+
 // Noet that this function does not initialize everything;
 // It should always be followed by a call to initServer()!
 Server* createServer ()
@@ -156,16 +178,37 @@ void startServer (Server* server)
     server->is_started = true;
 }
 
-// Return the client-communication socket descriptor, and fill the structure
-// client_adress with the right values (as accept() do)
-int waitForClient (Server* server, struct sockaddr_in* client_address)
+// Return a new, initialized client structure by using accept()
+// The Server structure is also modified accordingly!
+
+// TODO: improve this!
+// If the server has no more free client slot, fails, print an error, and return NULL
+Client* acceptNewClient (Server* server)
 {
     if (! serverIsStarted(server))
-        handleErrorAndExit("waitForClient() failed: server is not started");
+        handleErrorAndExit("acceptNewClient() failed: server is not started");
+    if (server->nb_clients == server->parameters.max_nb_clients)
+    {
+        printError("Warning: acceptNewClient() failed: no more free slot!\n");
+        return NULL;
+    }
 
-    int clientfd = acceptWebSocket(server->sockfd, client_address);
+    struct sockaddr_in address;
+    int clientfd = acceptWebSocket(server->sockfd, &address);
 
-    return clientfd;
+    // Create and initialize a Client structure
+    Client* new_client = createClient();
+    initClient(new_client, clientfd, address);
+
+    // Update the Server structure
+    server->clients[server->nb_clients] = new_client;
+    (server->nb_clients)++;
+
+    // Check if it is the highest file descriptor
+    if (clientfd > server->max_fd)
+        server->max_fd = clienfd;
+
+    return new_client;
 }
 
 // This function assumes the server is initialized and started
@@ -178,9 +221,7 @@ void handleClientRequests (Server* server)
     int clientfd = FD_NO_CLIENT;
     int max_fd;
 
-    // Indefinitely loop, waiting for new clients OR requests
-    // To this aim, a list of file descriptors to wait for is used,
-    // thanks to select()
+    // List of file descriptors to wait for them to be ready (+ timeout)
     fd_set read_fds, write_fds;
     struct timeval timeout;
 
@@ -188,14 +229,15 @@ void handleClientRequests (Server* server)
 
     struct sockaddr_in client_address;
 
+    // Indefinitely loop, waiting for new clients OR requests
     for (;;)
     {
         // Always scan for the socket listening for new clients
         // Also scan for the possible client (scanned_fds is modified each time)
 
-        // TODO: generalize this, use poll()?
+        // TODO: use poll() or epoll()?
         FD_ZERO(&read_fds);
-        FD_ZERO(&write_fds);       
+        FD_ZERO(&write_fds);
 
         FD_SET(server->sockfd, &read_fds);
         max_fd = server->sockfd + 1;

@@ -6,6 +6,13 @@
 #include <sys/types.h>
 #include <sys/time.h>
 
+// Structure represeting a client (server-side)
+typedef struct Client {
+	int 			   fd;
+	struct sockaddr_in address;
+	// State, etc?
+} Client;
+
 // Structures used tor epresent a server
 typedef struct ServParameters {
 	int queue_max_length;
@@ -15,15 +22,14 @@ typedef struct ServParameters {
 	// ...
 } ServParameters;
 
-
 typedef struct Server {
 	int                sockfd;
 	struct sockaddr_in address;
 	bool 		       is_started;
 
-	int* 			   client_fds;
+	Client*			   clients;
 	int 			   nb_clients;
-	int 			   max_client_fd;
+	int 			   max_fd;
 
 	ServParameters  parameters;
 } Server;
@@ -50,6 +56,9 @@ void bindWebSocket (const int sockfd, const struct sockaddr_in *address);
 void listenWebSocket (const int sockfd, const int queue_max_length);
 int acceptWebSocket (const int sockfd, struct sockaddr_in* address);
 
+Client* createClient ();
+void deleteClient (Client* client);
+void initClient (Client* client, const int fd, const struct sockaddr_in address);
 Server* createServer ();
 void deleteServer (Server* server);
 void initServer (Server* server, const int sockfd, const struct sockaddr_in address,
@@ -57,7 +66,7 @@ void initServer (Server* server, const int sockfd, const struct sockaddr_in addr
 void defaultInitServer (Server* server);
 
 void startServer (Server* server);
-int waitForClient (Server* server, struct sockaddr_in* client_address);
+int acceptNewClient (Server* server);
 void handleClientRequests (Server* server);
 
 #endif
