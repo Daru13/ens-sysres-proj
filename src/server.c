@@ -108,6 +108,13 @@ void initServer (Server* server, const int sockfd, const struct sockaddr_in addr
 
     // When initialized, the server is considered non-active
     server->is_started = false;
+
+    // It has no client at the beginning
+    server->client_fds = malloc(parameters.max_nb_clients * sizeof(int));
+    if (server->client_fds == NULL)
+        handleErrorAndExit("malloc() failed in initServer()");
+    server->nb_clients    = 0;
+    server->max_client_fd = FD_NO_CLIENT;
 }
 
 // Initialize a server with default values
@@ -117,7 +124,10 @@ void defaultInitServer (Server* server)
     struct sockaddr_in address = getLocalAddress(SERV_DEFAULT_PORT);
 
     ServParameters parameters;
-    parameters.queue_max_length = SERV_DEFAULT_QUEUE_MAX_LENGTH;
+    parameters.queue_max_length  = SERV_DEFAULT_QUEUE_MAX_LENGTH;
+    parameters.max_nb_clients    = SERV_DEFAULT_MAX_NB_CLIENTS;
+    parameters.read_buffer_size  = SERV_DEFAULT_READ_BUF_SIZE;
+    parameters.write_buffer_size = SERV_DEFAULT_WRITE_BUF_SIZE;
 
     initServer(server, sockfd, address, parameters);
 }

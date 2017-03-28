@@ -9,6 +9,9 @@
 // Structures used tor epresent a server
 typedef struct ServParameters {
 	int queue_max_length;
+	int max_nb_clients;
+	int read_buffer_size;
+	int write_buffer_size;
 	// ...
 } ServParameters;
 
@@ -18,16 +21,22 @@ typedef struct Server {
 	struct sockaddr_in address;
 	bool 		       is_started;
 
-	ServParameters  parameters;
-	
+	int* 			   client_fds;
+	int 			   nb_clients;
+	int 			   max_client_fd;
 
+	ServParameters  parameters;
 } Server;
 
 // -----------------------------------------------------------------------------
 
 // Default values concerning the server
 #define SERV_DEFAULT_PORT 			  4242
+
 #define SERV_DEFAULT_QUEUE_MAX_LENGTH 5
+#define SERV_DEFAULT_MAX_NB_CLIENTS   64 
+#define SERV_DEFAULT_READ_BUF_SIZE    512 // bytes
+#define SERV_DEFAULT_WRITE_BUF_SIZE   512 // bytes
 
 // Named, useful constants
 #define FD_NO_CLIENT -1
