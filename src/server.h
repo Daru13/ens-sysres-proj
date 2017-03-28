@@ -27,7 +27,7 @@ typedef struct Server {
 	struct sockaddr_in address;
 	bool 		       is_started;
 
-	Client*			   clients;
+	Client**		   clients;
 	int 			   nb_clients;
 	int 			   max_fd;
 
@@ -66,7 +66,7 @@ void initServer (Server* server, const int sockfd, const struct sockaddr_in addr
 void defaultInitServer (Server* server);
 
 void startServer (Server* server);
-int acceptNewClient (Server* server);
+Client* acceptNewClient (Server* server);
 void handleClientRequests (Server* server);
 
 #endif
