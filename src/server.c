@@ -286,7 +286,6 @@ void handleClientRequests (Server* server)
             // It is useless to check for all clients if we already found all the ready ones
             if (nb_ready_clients_read == 0)
                 break;
-            nb_ready_clients_read--;
 
             Client* current_client = server->clients[i];
             if (current_client == NULL)
@@ -296,6 +295,8 @@ void handleClientRequests (Server* server)
             int current_fd = current_client->fd;
             if (FD_ISSET(current_fd, &read_fds))
             {
+                nb_ready_clients_read--;
+                
                 // TODO: to delegate; this is just a temporary reading test!
                 printf("Reading up to 512 bytes from client %d...\n", current_fd);
                 
