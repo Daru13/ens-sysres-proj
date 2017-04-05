@@ -13,7 +13,7 @@ typedef struct Client {
 	// State, etc?
 } Client;
 
-// Structures used tor epresent a server
+// Structures used to represent a server
 typedef struct ServParameters {
 	int queue_max_length;
 	int max_nb_clients;

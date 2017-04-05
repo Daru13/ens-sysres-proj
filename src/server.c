@@ -103,6 +103,12 @@ void initClient (Client* client, const int fd, const struct sockaddr_in address)
     client->address = address;
 }
 
+void printClient (Client* client)
+{
+    // To complete?
+    printf("Client (fd: %d)\n", client->fd);
+}
+
 // -----------------------------------------------------------------------------
 
 // Noet that this function does not initialize everything;
@@ -161,6 +167,22 @@ void defaultInitServer (Server* server)
 bool serverIsStarted (const Server* server)
 {
     return server->is_started;
+}
+
+void printServer (const Server* server)
+{
+    printSubtitle("\n----- SERVER -----");
+    printf("sockfd: %d\n", server->sockfd);
+    printf("is started: %s\n", server->is_started ? "true" : "false");
+    printf("nb_clients: %d\n", server->nb_clients);
+    printf("max_fd: %d\n", server->max_fd);
+    printf("\n");
+
+    for (int i = 0; i < server->nb_clients; i++)
+        printClient(server->clients[i]);
+    printf("\n");
+
+    // Print parameters as well?
 }
 
 // -----------------------------------------------------------------------------
@@ -223,20 +245,20 @@ void handleClientRequests (Server* server)
 
     // List of file descriptors to wait for them to be ready + timer for wait()
     fd_set read_fds, write_fds;
-    struct timeval timeout;
+    // struct timeval timeout;
 
     char buffer[512 + 1]; // TODO: temporary, delegate read and write ops
 
     // Indefinitely loop, waiting for new clients OR requests
     for (;;)
     {
-        // Always scan for the socket listening for new clients
         FD_ZERO(&read_fds);
         FD_ZERO(&write_fds);
 
+        // Always scan for the socket listening for new clients
         FD_SET(server->sockfd, &read_fds);
 
-        // Also scan for the possible client (scanned_fds is modified each time)
+        // Also scan for all the possibly ready clients
         for (int i = 0; i < server->nb_clients; i++)
         {
             // In case of client removal + use of an array...
@@ -245,11 +267,11 @@ void handleClientRequests (Server* server)
             Client* current_client = server->clients[i];
             if (current_client != NULL)
                 FD_SET(current_client->fd, &read_fds);
-        }  
+        }
 
         // Set up the timeout value (modified each time too); infinite time here
-        timeout.tv_sec  = -1;
-        timeout.tv_usec = -1;
+        // timeout.tv_sec  = -1;
+        // timeout.tv_usec = -1;
 
         printf("Before select() [sockfd = %d, nb_clients = %d]:\n",
                server->sockfd, server->nb_clients);
@@ -258,7 +280,10 @@ void handleClientRequests (Server* server)
         if (nb_ready_fds < 0)
             handleErrorAndExit("select() failed");
 
+        // Some debug printing :)
+        printServer(server);
         printf("%d file descriptor(s) ready!\n", nb_ready_fds);
+
         int nb_ready_clients_read = nb_ready_fds;
 
         /* TODO: READ AND WRITE DELEGATE TO PROCESSES/THREADS/ETC
@@ -294,6 +319,8 @@ void handleClientRequests (Server* server)
 
             // read() call on each ready client's socket fd
             int current_fd = current_client->fd;
+            printf("Checking client %d...\n", current_fd);
+
             if (FD_ISSET(current_fd, &read_fds))
             {
                 // TODO: to delegate; this is just a temporary reading test!
@@ -313,7 +340,7 @@ void handleClientRequests (Server* server)
             nb_ready_clients_read--;
 
             Client* new_client = acceptNewClient(server);
-            printf("New client (fd = %d) hs been accepted.\n", new_client->fd);
+            printf("New client (fd = %d) has been accepted.\n", new_client->fd);
         }
     }  
 }
