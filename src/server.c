@@ -206,7 +206,7 @@ void startServer (Server* server)
 
 // TODO: handle a proper client addition/removal, to avoid waisted space/long searches!
 
-void addClientToServer (Server* server, Client* client)
+void addClientToServer (Server* server, const Client* client)
 {
     // Add the client to the server's list of clients
     server->clients[server->nb_clients] = client;

@@ -50,7 +50,7 @@ void printUsageAndExit (const char* argv[])
 
 // Internal version only! 
 // Allows a cascade of functions calls using a variable number of arguments :)
-void _printColor (const char* color, const char* format, va_list args)
+static void _printColor (const char* color, const char* format, va_list args)
 {
     printf("%s", color);
     vprintf(format, args);
