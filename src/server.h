@@ -10,6 +10,8 @@
 typedef struct Client {
 	int 			   fd;
 	struct sockaddr_in address;
+
+	int slot_index; // Position in the server's client array
 	// State, etc?
 } Client;
 
@@ -46,6 +48,8 @@ typedef struct Server {
 
 // Named, useful constants
 #define FD_NO_CLIENT -1
+
+#define NO_ASSIGNED_SLOT -1
 
 // -----------------------------------------------------------------------------
 

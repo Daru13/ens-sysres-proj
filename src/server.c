@@ -101,12 +101,14 @@ void initClient (Client* client, const int fd, const struct sockaddr_in address)
 {
     client->fd      = fd;
     client->address = address;
+
+    client->slot_index = NO_ASSIGNED_SLOT;
 }
 
 void printClient (Client* client)
 {
     // To complete?
-    printf("Client (fd: %d)\n", client->fd);
+    printf("Client (fd: %d, slot_index: %d)\n", client->fd, client->slot_index);
 }
 
 // -----------------------------------------------------------------------------
@@ -208,8 +210,15 @@ void startServer (Server* server)
 
 void addClientToServer (Server* server, Client* client)
 {
-    // Add the client to the server's list of clients
-    server->clients[server->nb_clients] = client;
+    // Find the first free client slot, and add the new client therein
+    int first_free_slot_index = 0;
+    while (server->clients[first_free_slot_index] != NULL
+       &&  first_free_slot_index < server->parameters.max_nb_clients)
+        first_free_slot_index++;
+
+    client->slot_index = first_free_slot_index;
+
+    server->clients[first_free_slot_index] = client;
     (server->nb_clients)++;
 
     // Check if the new client has the (new) highest file descriptor
@@ -223,26 +232,23 @@ void removeClientFromServer (Server* server, Client* client)
     printf("Client (fd: %d) is being removed.\n", client->fd);
 
     // Remove the client from the server's list of client
-    int max_fd = server->sockfd;
+    // Also updates the higher file descriptor (since it can be the
+    // file descriptor of the client which is being removed)
+    server->clients[client->slot_index] = NULL;
 
+    int max_fd = server->sockfd;
     for (int i = 0; i < server->nb_clients; i++)
     {
         Client* current_client = server->clients[i];
+        if (current_client == NULL)
+            continue;
 
-        if (current_client == client)
-            server->clients[i] = NULL;
-        
-        // Also updates the higher file descriptor (since it can be the
-        // file descriptor of the client which is being removed)
-        else
-        {
-            int current_fd = current_client->fd;
-            if (current_fd > max_fd)
-                max_fd = current_fd;
-        }
+        int current_fd = current_client->fd;
+        if (current_fd > max_fd)
+            max_fd = current_fd;
     }
-
     server->max_fd = max_fd;
+    
     (server->nb_clients)--;
     
     // Actually delete the Client structure
