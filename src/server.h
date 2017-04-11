@@ -66,6 +66,8 @@ void initServer (Server* server, const int sockfd, const struct sockaddr_in addr
 void defaultInitServer (Server* server);
 
 void startServer (Server* server);
+void addClientToServer (Server* server, Client* client);
+void removeClientFromServer (Server* server, Client* client);
 Client* acceptNewClient (Server* server);
 void handleClientRequests (Server* server);
 

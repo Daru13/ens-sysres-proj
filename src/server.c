@@ -204,6 +204,51 @@ void startServer (Server* server)
     server->is_started = true;
 }
 
+// TODO: handle a proper client addition/removal, to avoid waisted space/long searches!
+
+void addClientToServer (Server* server, Client* client)
+{
+    // Add the client to the server's list of clients
+    server->clients[server->nb_clients] = client;
+    (server->nb_clients)++;
+
+    // Check if the new client has the (new) highest file descriptor
+    int client_fd = client->fd;
+    if (client_fd > server->max_fd)
+        server->max_fd = client_fd;
+}
+
+void removeClientFromServer (Server* server, Client* client)
+{
+    printf("Client (fd: %d) is being removed.\n", client->fd);
+
+    // Remove the client from the server's list of client
+    int max_fd = server->sockfd;
+
+    for (int i = 0; i < server->nb_clients; i++)
+    {
+        Client* current_client = server->clients[i];
+
+        if (current_client == client)
+            server->clients[i] = NULL;
+        
+        // Also updates the higher file descriptor (since it can be the
+        // file descriptor of the client which is being removed)
+        else
+        {
+            int current_fd = current_client->fd;
+            if (current_fd > max_fd)
+                max_fd = current_fd;
+        }
+    }
+
+    server->max_fd = max_fd;
+    (server->nb_clients)--;
+    
+    // Actually delete the Client structure
+    deleteClient(client);
+}
+
 // Return a new, initialized client structure by using accept()
 // The Server structure is also modified accordingly!
 
@@ -213,6 +258,7 @@ Client* acceptNewClient (Server* server)
 {
     if (! serverIsStarted(server))
         handleErrorAndExit("acceptNewClient() failed: server is not started");
+
     if (server->nb_clients == server->parameters.max_nb_clients)
     {
         printError("Warning: acceptNewClient() failed: no more free slot!\n");
@@ -222,19 +268,30 @@ Client* acceptNewClient (Server* server)
     struct sockaddr_in address;
     int clientfd = acceptWebSocket(server->sockfd, &address);
 
-    // Create and initialize a Client structure
+    // Create and initialize a Client structure, and add it to the server
     Client* new_client = createClient();
     initClient(new_client, clientfd, address);
-
-    // Update the Server structure
-    server->clients[server->nb_clients] = new_client;
-    (server->nb_clients)++;
-
-    // Check if it is the highest file descriptor
-    if (clientfd > server->max_fd)
-        server->max_fd = clientfd;
+    addClientToServer(server, new_client);
 
     return new_client;
+}
+
+// TODO: Temporary; must be improved
+void readFromClient (Server* server, Client* client)
+{
+    char buffer[512 + 1];
+
+    printf("Reading up to 512 bytes from client %d...\n", client->fd);
+    int nb_bytes_read = read(client->fd, &buffer, 512);
+    buffer[nb_bytes_read] = '\0';
+
+    printf("***** Buffer content below (%d bytes) *****\n", nb_bytes_read);
+    printf("%s\n", buffer);
+
+    // If the read() call returned 0 (no byte has been read), it means the
+    // client has ended the connection, and can be removed from the list of clients
+    if (nb_bytes_read == 0)
+        removeClientFromServer(server, client);
 }
 
 // TODO: use poll() or epoll() at some point?
@@ -246,8 +303,6 @@ void handleClientRequests (Server* server)
     // List of file descriptors to wait for them to be ready + timer for wait()
     fd_set read_fds, write_fds;
     // struct timeval timeout;
-
-    char buffer[512 + 1]; // TODO: temporary, delegate read and write ops
 
     // Indefinitely loop, waiting for new clients OR requests
     for (;;)
@@ -323,15 +378,7 @@ void handleClientRequests (Server* server)
             if (FD_ISSET(current_fd, &read_fds))
             {
                 nb_ready_clients_read--;
-                
-                // TODO: to delegate; this is just a temporary reading test!
-                printf("Reading up to 512 bytes from client %d...\n", current_fd);
-                
-                int nb_bytes_read = read(current_fd, &buffer, 512);
-                buffer[nb_bytes_read] = '\0';
-
-                printf("***** Buffer content below (%d bytes) *****\n", nb_bytes_read);
-                printf("%s\n", buffer);
+                readFromClient(server, current_client);
             }
         }
 

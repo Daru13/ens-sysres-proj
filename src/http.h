@@ -32,8 +32,8 @@ typedef struct HttpContent {
 
 // Struture represeting a full HTTP message
 typedef struct HttpMessage {
-	HttpHeader  header;
-	HttpContent content;
+	HttpHeader*  header;
+	HttpContent* content;
 } HttpMessage;
 
 // -----------------------------------------------------------------------------
