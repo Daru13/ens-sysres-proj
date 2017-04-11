@@ -38,9 +38,10 @@ typedef enum HttpCode {
     // Not sure we can handle many more in limited time, though
 
     HTTP_NO_CODE // No code needed (i.e. incomming message)
-}
+} HttpCode;
 
 // Structure representing a HTTP header
+// It can be used for both incomming and outgoing messages!
 typedef struct HttpHeader {
     HttpVersion version;
     HttpMethod  method;
@@ -64,6 +65,20 @@ typedef struct HttpMessage {
 
 // -----------------------------------------------------------------------------
 
+HttpHeader* createHttpHeader ();
+void deleteHttpHeader (HttpHeader* header);
+void initRequestHttpHeader (HttpHeader* header);
+void initAnswerHttpHeader (HttpHeader* header,
+                           const HttpVersion version, const HttpCode code);
 
+HttpContent* createHttpContent ();
+void deleteHttpContent (HttpContent* content);
+void initEmptyHttpContent (HttpContent* content);
+
+HttpMessage* createHttpMessage ();
+void deleteHttpMessage (HttpMessage* message);
+void initRequestHttpMessage (HttpMessage* message);
+void initAnswerHttpMessage (HttpMessage* message,
+                            const HttpVersion version, const HttpCode code);
 
 #endif
