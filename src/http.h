@@ -1,11 +1,6 @@
 #ifndef __H_HTTP__
 #define __H_HTTP__
 
-#include <stdbool.h>
-#include <netinet/in.h>
-#include <sys/types.h>
-#include <sys/time.h>
-
 // Useful, finite types related to HTTP
 typedef enum HttpVersion {
 	HTTP_V1_0,
