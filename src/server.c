@@ -180,8 +180,15 @@ void printServer (const Server* server)
     printf("max_fd: %d\n", server->max_fd);
     printf("\n");
 
-    for (int i = 0; i < server->nb_clients; i++)
-        printClient(server->clients[i]);
+    for (int i = 0; i < server->parameters.max_nb_clients; i++)
+    {
+        Client* current_client = server->clients[i];
+        if (current_client == NULL)
+            continue;
+
+        printClient(current_client);
+    }
+        
     printf("\n");
 
     // Print parameters as well?
@@ -320,14 +327,15 @@ void handleClientRequests (Server* server)
         FD_SET(server->sockfd, &read_fds);
 
         // Also scan for all the possibly ready clients
-        for (int i = 0; i < server->nb_clients; i++)
+        for (int i = 0; i < server->parameters.max_nb_clients; i++)
         {
-            // In case of client removal + use of an array...
             // TODO: use a better data structure to store clients...? Doubly-linked list?
             // TODO: handle more than reading from clients!
             Client* current_client = server->clients[i];
-            if (current_client != NULL)
-                FD_SET(current_client->fd, &read_fds);
+            if (current_client == NULL)
+                continue;
+
+            FD_SET(current_client->fd, &read_fds);
         }
 
         // Set up the timeout value (modified each time too); infinite time here
@@ -367,7 +375,7 @@ void handleClientRequests (Server* server)
 
         // Wait for a current client's input
         // TODO: handle write operations as well!  
-        for (int i = 0; i < server->nb_clients; i++)
+        for (int i = 0; i < server->parameters.max_nb_clients; i++)
         {
             // It is useless to check for all clients if we already found all the ready ones
             if (nb_ready_clients_read == 0)
