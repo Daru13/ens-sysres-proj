@@ -97,12 +97,23 @@ void deleteClient (Client* client)
     free(client);
 }
 
-void initClient (Client* client, const int fd, const struct sockaddr_in address)
+void initClient (Client* client, const int fd, const struct sockaddr_in address,
+                 const int read_buffer_size, const int write_buffer_size)
 {
     client->fd      = fd;
     client->address = address;
 
     client->slot_index = NO_ASSIGNED_SLOT;
+
+    client->read_buffer_offset = 0;
+    client->read_buffer        = malloc(read_buffer_size * sizeof(char));
+    if (client->read_buffer == NULL)
+        handleErrorAndExit("malloc() failed in initClient()");
+
+    client->write_buffer_offset = 0;
+    client->write_buffer        = malloc(write_buffer_size * sizeof(char));
+    if (client->write_buffer == NULL)
+        handleErrorAndExit("malloc() failed in initClient()");
 }
 
 void printClient (Client* client)
@@ -269,10 +280,12 @@ void removeClientFromServer (Server* server, Client* client)
 // If the server has no more free client slot, fails, print an error, and return NULL
 Client* acceptNewClient (Server* server)
 {
+    ServParameters parameters = server->parameters;
+
     if (! serverIsStarted(server))
         handleErrorAndExit("acceptNewClient() failed: server is not started");
 
-    if (server->nb_clients == server->parameters.max_nb_clients)
+    if (server->nb_clients == parameters.max_nb_clients)
     {
         printError("Warning: acceptNewClient() failed: no more free slot!\n");
         return NULL;
@@ -283,7 +296,8 @@ Client* acceptNewClient (Server* server)
 
     // Create and initialize a Client structure, and add it to the server
     Client* new_client = createClient();
-    initClient(new_client, clientfd, address);
+    initClient(new_client, clientfd, address,
+               parameters.read_buffer_size, parameters.write_buffer_size);
     addClientToServer(server, new_client);
 
     return new_client;
