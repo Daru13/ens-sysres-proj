@@ -20,10 +20,14 @@ typedef struct Client {
     int slot_index; // Position in the server's client array
     
     ClientState state;
+
     char*       read_buffer;
-    int         read_buffer_offset;
+    int         read_buffer_message_length;
+    int         read_buffer_message_offset;
+
     char*       write_buffer;
-    int         write_buffer_offset;
+    int         write_buffer_message_length;
+    int         write_buffer_message_offset;
 } Client;
 
 // Structures used to represent a server
@@ -75,17 +79,23 @@ Client* createClient ();
 void deleteClient (Client* client);
 void initClient (Client* client, const int fd, const struct sockaddr_in address,
                  const int read_buffer_size, const int write_buffer_size);
+char* getClientStateAsText (const ClientState state);
+void printClient (const Client* client);
+
 Server* createServer ();
 void deleteServer (Server* server);
 void initServer (Server* server, const int sockfd, const struct sockaddr_in address,
                  const ServParameters parameters);
 void defaultInitServer (Server* server);
+bool serverIsStarted (const Server* server);
+void printServer (const Server* server);
 
 void startServer (Server* server);
 void addClientToServer (Server* server, Client* client);
 void removeClientFromServer (Server* server, Client* client);
 Client* acceptNewClient (Server* server);
 void readFromClient (Server* server, Client* client);
+void writeToClient (Server* server, Client* client);
 void handleClientRequests (Server* server);
 
 #endif

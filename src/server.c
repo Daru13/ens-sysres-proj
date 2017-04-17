@@ -105,21 +105,44 @@ void initClient (Client* client, const int fd, const struct sockaddr_in address,
 
     client->slot_index = NO_ASSIGNED_SLOT;
 
-    client->read_buffer_offset = 0;
-    client->read_buffer        = malloc(read_buffer_size * sizeof(char));
+    client->read_buffer_message_length = 0;
+    client->read_buffer_message_offset = 0;
+    client->read_buffer                = malloc(read_buffer_size * sizeof(char));
     if (client->read_buffer == NULL)
         handleErrorAndExit("malloc() failed in initClient()");
 
-    client->write_buffer_offset = 0;
-    client->write_buffer        = malloc(write_buffer_size * sizeof(char));
+    client->write_buffer_message_length = 0;
+    client->write_buffer_message_offset = 0;
+    client->write_buffer                = malloc(write_buffer_size * sizeof(char));
     if (client->write_buffer == NULL)
         handleErrorAndExit("malloc() failed in initClient()");
 }
 
-void printClient (Client* client)
+char* getClientStateAsText (const ClientState state)
+{
+    switch (state)
+    {
+        case STATE_WAITING_FOR_REQUEST:
+            return "WAITING_FOR_REQUEST";
+
+        case STATE_ANSWERING:
+            return "ANSWERING";
+
+        default:
+            return "UNKNOWN";
+    }
+}
+
+void printClient (const Client* client)
 {
     // To complete?
-    printf("Client (fd: %d, slot_index: %d)\n", client->fd, client->slot_index);
+    printSubtitle("Client (fd: %d)", client->fd);
+    printf("| slot_index: %d\n", client->slot_index);
+    printf("| state: %s\n", getClientStateAsText(client->state));
+    printf("| read_buffer: ofs = %d, length = %d\n",
+        client->read_buffer_message_length, client->read_buffer_message_offset);
+    printf("| write_buffer: ofs = %d, length = %d\n",
+        client->write_buffer_message_length, client->write_buffer_message_offset);
 }
 
 // -----------------------------------------------------------------------------
@@ -184,7 +207,7 @@ bool serverIsStarted (const Server* server)
 
 void printServer (const Server* server)
 {
-    printSubtitle("\n----- SERVER -----");
+    printSubtitle("\n====== SERVER ======");
     printf("sockfd: %d\n", server->sockfd);
     printf("is started: %s\n", server->is_started ? "true" : "false");
     printf("nb_clients: %d\n", server->nb_clients);
@@ -306,20 +329,72 @@ Client* acceptNewClient (Server* server)
 // TODO: Temporary; must be improved
 void readFromClient (Server* server, Client* client)
 {
-    char buffer[512 + 1];
-
-    printf("Reading up to 512 bytes from client %d...\n", client->fd);
-    int nb_bytes_read = read(client->fd, &buffer, 512);
-    buffer[nb_bytes_read] = '\0';
+    // Read data from the socket
+    printf("Reading up to %d bytes from client %d...\n",
+           server->parameters.read_buffer_size - 1, client->fd);
+    int nb_bytes_read = read(client->fd, client->read_buffer,
+                             server->parameters.read_buffer_size - 1);
+    client->read_buffer[nb_bytes_read] = '\0';
 
     printf("***** Buffer content below (%d bytes) *****\n", nb_bytes_read);
-    printf("%s\n", buffer);
+    printf("%s\n", client->read_buffer);
+    for (int i = 0; i < nb_bytes_read; i++)
+        printf("char %i is %d\n", i, client->read_buffer[i]);
+
+    printf("strlen buffer: %lu\n", strlen(client->read_buffer));
+
+    // TODO: REMOVE THIS TEST :D!
+    if (! strcmp(client->read_buffer, "write\r\n"))
+        client->state = STATE_ANSWERING;
 
     // If the read() call returned 0 (no byte has been read), it means the
-    // client has ended the connection, and can be removed from the list of clients
+    // client has ended the connection.
+    // Thus, it can be removed from the list of clients
     if (nb_bytes_read == 0)
         removeClientFromServer(server, client);
 }
+
+// TODO: Temporary; must be improved
+void writeToClient (Server* server, Client* client)
+{
+    // TODO: REMOVE THIS TEST
+    char* test_msg = "YOU LOST, CLIENT!\n";
+    sprintf(client->write_buffer, test_msg, sizeof test_msg);
+    client->write_buffer_message_length = sizeof test_msg;
+
+    // Write the data on the socket
+    printf("Writing up to %d bytes to client %d...\n",
+           server->parameters.write_buffer_size - 1, client->fd);
+    int nb_bytes_write = write(client->fd, client->write_buffer,
+                               server->parameters.write_buffer_size - 1);
+    client->write_buffer[nb_bytes_write] = '\0';
+
+    printf("***** Buffer content below (%d bytes) *****\n", nb_bytes_write);
+    printf("%s\n", client->write_buffer);
+
+    // Update the client state
+    client->write_buffer_message_offset += nb_bytes_write;
+    if (client->write_buffer_message_offset >= client->write_buffer_message_length)
+        client->state = STATE_WAITING_FOR_REQUEST;  
+}
+
+/* TODO: READ AND WRITE DELEGATE TO PROCESSES/THREADS/ETC?
+ *
+ * it may be an interesting idea to delegate read and write operations to
+ * threads (for instance), so it doesn't block the current process to keep
+ * listening to sockets/answering more requests in "parallel"?
+ *
+ * However, we are still limited by the network interface (i.e. if several
+ * threads try to read or write from different sockets, will they likely be
+ * paused and only processed one after another ; is there any advantage in
+ * doing this...?)
+ *
+ * There may also be interesting flags to use, to reduce/avoid
+ * such issues/latency!
+ *
+ * This should be discussed at some point, even though this is not important
+ * at the current time :).
+ */
 
 // TODO: use poll() or epoll() at some point?
 void handleClientRequests (Server* server)
@@ -327,9 +402,8 @@ void handleClientRequests (Server* server)
     if (! serverIsStarted(server))
         handleErrorAndExit("handleClientRequests() failed: server is not started");
 
-    // List of file descriptors to wait for them to be ready + timer for wait()
+    // List of file descriptors to wait for them to be ready
     fd_set read_fds, write_fds;
-    // struct timeval timeout;
 
     // Indefinitely loop, waiting for new clients OR requests
     for (;;)
@@ -344,17 +418,15 @@ void handleClientRequests (Server* server)
         for (int i = 0; i < server->parameters.max_nb_clients; i++)
         {
             // TODO: use a better data structure to store clients...? Doubly-linked list?
-            // TODO: handle more than reading from clients!
             Client* current_client = server->clients[i];
             if (current_client == NULL)
                 continue;
 
-            FD_SET(current_client->fd, &read_fds);
+            if (current_client->state == STATE_WAITING_FOR_REQUEST)
+                FD_SET(current_client->fd, &read_fds);
+            if (current_client->state == STATE_ANSWERING)
+                FD_SET(current_client->fd, &write_fds);
         }
-
-        // Set up the timeout value (modified each time too); infinite time here
-        // timeout.tv_sec  = -1;
-        // timeout.tv_usec = -1;
 
         printf("Before select() [sockfd = %d, nb_clients = %d]:\n",
                server->sockfd, server->nb_clients);
@@ -367,54 +439,28 @@ void handleClientRequests (Server* server)
         printServer(server);
         printf("%d file descriptor(s) ready!\n", nb_ready_fds);
 
-        int nb_ready_clients_read = nb_ready_fds;
-
-        /* TODO: READ AND WRITE DELEGATE TO PROCESSES/THREADS/ETC
-         *
-         * it may be an interesting idea to delegate read and write operations to
-         * threads (for instance), so it doesn't block the current process to keep
-         * listening to sockets/answering more requests in "parallel"?
-         *
-         * However, we are still limited by the network interface (i.e. if several
-         * threads try to read or write from different sockets, will they likely be
-         * paused and only processed one after another ; is there any advantage in
-         * doing this...?)
-         *
-         * There may also be interesting flags to use, to reduce/avoid
-         * such issues/latency!
-         *
-         * This should be discussed at some point, even though this is not important
-         * at the current time :).
-         */
-
         // Wait for a current client's input
         // TODO: handle write operations as well!  
         for (int i = 0; i < server->parameters.max_nb_clients; i++)
         {
-            // It is useless to check for all clients if we already found all the ready ones
-            if (nb_ready_clients_read == 0)
-                break;
-
             Client* current_client = server->clients[i];
             if (current_client == NULL)
                 continue;
 
-            // read() call on each ready client's socket fd
+            // Read or write from/to ready clients
             int current_fd = current_client->fd;
             printf("Checking client %d...\n", current_fd);
 
             if (FD_ISSET(current_fd, &read_fds))
-            {
-                nb_ready_clients_read--;
                 readFromClient(server, current_client);
-            }
+
+            if (FD_ISSET(current_fd, &write_fds))
+                writeToClient(server, current_client);
         }
 
         // If sockfd is ready, accept a new client
         if (FD_ISSET(server->sockfd, &read_fds))
         {
-            nb_ready_clients_read--;
-
             Client* new_client = acceptNewClient(server);
             printf("New client (fd = %d) has been accepted.\n", new_client->fd);
         }
