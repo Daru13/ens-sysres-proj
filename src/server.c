@@ -338,11 +338,12 @@ void readFromClient (Server* server, Client* client)
 
     printf("***** Buffer content below (%d bytes) *****\n", nb_bytes_read);
     printf("%s\n", client->read_buffer);
+/*
     for (int i = 0; i < nb_bytes_read; i++)
         printf("char %i is %d\n", i, client->read_buffer[i]);
 
     printf("strlen buffer: %lu\n", strlen(client->read_buffer));
-
+*/
     // TODO: REMOVE THIS TEST :D!
     if (! strcmp(client->read_buffer, "write\r\n"))
         client->state = STATE_ANSWERING;
