@@ -9,7 +9,7 @@
 
 HttpHeader* createHttpHeader ()
 {
-    HttpHeader* new_header = malloc(sizeof(HttpHeader));
+    HttpHeader* new_header = calloc(sizeof(HttpHeader));
     if (new_header == NULL)
         handleErrorAndExit("malloc() failed in createHttpHeader()");
 
@@ -28,10 +28,12 @@ void initRequestHttpHeader (HttpHeader* header)
     header->version = HTTP_UNKNOWN_VERSION;
     header->method  = HTTP_UNKNOWN_METHOD;
     header->code    = HTTP_NO_CODE;
-
+    
+    header->requestType = HTTP_NO_REQUEST_TYPE;
+/* Inutile : on utilise un calloc, tout est a zero de base.
     // TODO: init all fields to NULL (i.e. no value by default)
     header->field_example   = NULL;
-    header->field_example_2 = NULL;
+    header->field_example_2 = NULL; // */
 }
 
 // Made for headers of outgoing messages (i.e. built by the server to answer requests)
