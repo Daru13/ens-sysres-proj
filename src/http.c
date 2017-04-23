@@ -9,7 +9,7 @@
 
 HttpHeader* createHttpHeader ()
 {
-    HttpHeader* new_header = calloc(sizeof(HttpHeader));
+    HttpHeader* new_header = calloc(1, sizeof(HttpHeader));
     if (new_header == NULL)
         handleErrorAndExit("malloc() failed in createHttpHeader()");
 
@@ -30,10 +30,6 @@ void initRequestHttpHeader (HttpHeader* header)
     header->code    = HTTP_NO_CODE;
     
     header->requestType = HTTP_NO_REQUEST_TYPE;
-/* Inutile : on utilise un calloc, tout est a zero de base.
-    // TODO: init all fields to NULL (i.e. no value by default)
-    header->field_example   = NULL;
-    header->field_example_2 = NULL; // */
 }
 
 // Made for headers of outgoing messages (i.e. built by the server to answer requests)
@@ -44,9 +40,7 @@ void initAnswerHttpHeader (HttpHeader* header,
     header->method  = HTTP_NO_METHOD;
     header->code    = code;
 
-    // TODO: init all fields to NULL (i.e. no value by default)
-    header->field_example   = NULL;
-    header->field_example_2 = NULL;
+    header->requestType = HTTP_NO_REQUEST_TYPE;
 }
 
 // -----------------------------------------------------------------------------
@@ -62,14 +56,14 @@ HttpContent* createHttpContent ()
 
 void deleteHttpContent (HttpContent* content)
 {
-    // TODO: free the text buffer?
+    // TODO: free the body buffer?
     free(content);
 }
 
 void initEmptyHttpContent (HttpContent* content)
 {
     content->length = 0;
-    content->text   = NULL;
+    content->body   = NULL;
 }
 
 // -----------------------------------------------------------------------------

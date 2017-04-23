@@ -47,7 +47,7 @@ typedef enum HttpRequestType {
     HTTP_ASTERISK_FORM,  // Only for OPTIONS
     
     HTTP_NO_REQUEST_TYPE
-}
+} HttpRequestType;
 
 // Structure representing a HTTP header
 // It can be used for both incomming and outgoing messages!
@@ -65,7 +65,7 @@ typedef struct HttpHeader {
 // Structure representing a chunk of (text) data
 typedef struct HttpContent {
     int   length;
-    char* text;
+    char* body;
 } HttpContent;
 
 // Struture represeting a full HTTP message
