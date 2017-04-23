@@ -5,10 +5,13 @@
 #include <netinet/in.h>
 #include <sys/types.h>
 #include <sys/time.h>
+#include <poll.h>
 
 // Structure represeting a client (server-side)
 typedef enum ClientState {
     STATE_WAITING_FOR_REQUEST,
+    STATE_PROCESSING_REQUEST,
+    STATE_PROCUDING_ANWSER,
     STATE_ANSWERING
 } ClientState;
 
@@ -18,6 +21,13 @@ typedef struct Client {
 
     // TODO: change/remove?
     int slot_index; // Position in the server's client array
+
+    // TODO: use poll()
+    // struct pollfd poll_slot
+    
+    // Clients form a doubly-linked list
+    struct Client* previous;
+    struct Client* next;
     
     ClientState state;
 
@@ -44,7 +54,7 @@ typedef struct Server {
     struct sockaddr_in address;
     bool               is_started;
 
-    Client**           clients;
+    Client*            clients;
     int                nb_clients;
     int                max_fd;
 
@@ -78,7 +88,7 @@ int acceptWebSocket (const int sockfd, struct sockaddr_in* address);
 Client* createClient ();
 void deleteClient (Client* client);
 void initClient (Client* client, const int fd, const struct sockaddr_in address,
-                 const int read_buffer_size, const int write_buffer_size);
+                 const ServParameters parameters);
 char* getClientStateAsText (const ClientState state);
 void printClient (const Client* client);
 

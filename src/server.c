@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <poll.h>
 #include <netinet/in.h>
 #include "toolbox.h"
 #include "server.h"
@@ -98,22 +99,24 @@ void deleteClient (Client* client)
 }
 
 void initClient (Client* client, const int fd, const struct sockaddr_in address,
-                 const int read_buffer_size, const int write_buffer_size)
+                 const ServParameters parameters)
 {
     client->fd      = fd;
     client->address = address;
 
-    client->slot_index = NO_ASSIGNED_SLOT;
+    // client->slot_index = NO_ASSIGNED_SLOT;
+    client->previous = NULL;
+    client->next     = NULL;
 
     client->read_buffer_message_length = 0;
     client->read_buffer_message_offset = 0;
-    client->read_buffer                = malloc(read_buffer_size * sizeof(char));
+    client->read_buffer                = malloc(parameters.read_buffer_size * sizeof(char));
     if (client->read_buffer == NULL)
         handleErrorAndExit("malloc() failed in initClient()");
 
     client->write_buffer_message_length = 0;
     client->write_buffer_message_offset = 0;
-    client->write_buffer                = malloc(write_buffer_size * sizeof(char));
+    client->write_buffer                = malloc(parameters.write_buffer_size * sizeof(char));
     if (client->write_buffer == NULL)
         handleErrorAndExit("malloc() failed in initClient()");
 }
@@ -172,7 +175,7 @@ void initServer (Server* server, const int sockfd, const struct sockaddr_in addr
 
     // When initialized, the server is considered non-active
     server->is_started = false;
-
+/*
     // It has no client at the beginning
     server->clients = malloc(parameters.max_nb_clients * sizeof(Client));
     if (server->clients == NULL)
@@ -180,6 +183,8 @@ void initServer (Server* server, const int sockfd, const struct sockaddr_in addr
 
     for (int i = 0; i < parameters.max_nb_clients; i++)
         server->clients[i] = NULL;
+*/
+    server->clients = NULL;
 
     server->nb_clients = 0;
     server->max_fd     = sockfd;
@@ -213,7 +218,7 @@ void printServer (const Server* server)
     printf("nb_clients: %d\n", server->nb_clients);
     printf("max_fd: %d\n", server->max_fd);
     printf("\n");
-
+/*
     for (int i = 0; i < server->parameters.max_nb_clients; i++)
     {
         Client* current_client = server->clients[i];
@@ -222,7 +227,7 @@ void printServer (const Server* server)
 
         printClient(current_client);
     }
-        
+*/        
     printf("\n");
 
     // Print parameters as well?
@@ -239,7 +244,7 @@ void startServer (Server* server)
     if (serverIsStarted(server))
         handleErrorAndExit("startServer() failed: server is already started");
 
-   // Attach the local adress to the socket, and make it a listener
+    // Attach the local adress to the socket, and make it a listener
     bindWebSocket(server->sockfd, &server->address);
     listenWebSocket(server->sockfd, server->parameters.queue_max_length);
 
@@ -251,6 +256,28 @@ void startServer (Server* server)
 
 void addClientToServer (Server* server, Client* client)
 {
+    // Case 1: it is the first client
+    if (server->nb_clients == 0)
+    {
+        server->clients = client;
+
+        client->previous = NULL;
+        client->next     = NULL;
+    }
+
+    // Case 2: it is not the first client
+    else
+    {
+        // The new client is inserted right before the pointed client
+        client->previous = NULL;
+        client->next     = server->clients;
+
+        server->clients->previous = client;
+
+        // It thus becomes the "first" pointed client
+        server->clients = client;
+    }
+/*
     // Find the first free client slot, and add the new client therein
     int first_free_slot_index = 0;
     while (server->clients[first_free_slot_index] != NULL
@@ -260,23 +287,40 @@ void addClientToServer (Server* server, Client* client)
     client->slot_index = first_free_slot_index;
 
     server->clients[first_free_slot_index] = client;
-    (server->nb_clients)++;
+*/    
 
     // Check if the new client has the (new) highest file descriptor
     int client_fd = client->fd;
     if (client_fd > server->max_fd)
         server->max_fd = client_fd;
+
+    // Increment the number of clients
+    (server->nb_clients)++;
 }
 
 void removeClientFromServer (Server* server, Client* client)
 {
     printf("Client (fd: %d) is being removed.\n", client->fd);
 
+    // Remove the client from the doubly-linked list
+    if (client->next     != NULL)
+        client->next->previous = client->previous;
+    if (client->previous != NULL)
+        client->previous->next = client->next;
+
+    // If the server pointed on this client (i.e. it was the first client),
+    // make it point on the next one
+    if (server->clients == client)
+        server->clients = client->next;
+
+/*
     // Remove the client from the server's list of client
     // Also updates the higher file descriptor (since it can be the
     // file descriptor of the client which is being removed)
     server->clients[client->slot_index] = NULL;
+*/
 
+/*
     int max_fd = server->sockfd;
     for (int i = 0; i < server->nb_clients; i++)
     {
@@ -289,7 +333,7 @@ void removeClientFromServer (Server* server, Client* client)
             max_fd = current_fd;
     }
     server->max_fd = max_fd;
-    
+*/  
     (server->nb_clients)--;
     
     // Actually delete the Client structure
@@ -319,8 +363,7 @@ Client* acceptNewClient (Server* server)
 
     // Create and initialize a Client structure, and add it to the server
     Client* new_client = createClient();
-    initClient(new_client, clientfd, address,
-               parameters.read_buffer_size, parameters.write_buffer_size);
+    initClient(new_client, clientfd, address, parameters);
     addClientToServer(server, new_client);
 
     return new_client;
@@ -364,8 +407,8 @@ void writeToClient (Server* server, Client* client)
     client->write_buffer_message_length = sizeof test_msg;
 
     // Write the data on the socket
-    printf("Writing up to %d bytes to client %d...\n",
-           server->parameters.write_buffer_size - 1, client->fd);
+    printf("Writing up to %lu bytes to client %d...\n",
+           strlen(client->write_buffer), client->fd);
     int nb_bytes_write = write(client->fd, client->write_buffer,
                                server->parameters.write_buffer_size - 1);
     client->write_buffer[nb_bytes_write] = '\0';
@@ -406,7 +449,12 @@ void handleClientRequests (Server* server)
     // List of file descriptors to wait for them to be ready
     fd_set read_fds, write_fds;
 
-    // Indefinitely loop, waiting for new clients OR requests
+    // Client reference, used when looping voer all the clients
+    Client*     current_client;
+    int         current_fd;
+    ClientState current_state;
+
+    // Indefinitely loop, waiting for new/ready clients
     for (;;)
     {
         FD_ZERO(&read_fds);
@@ -414,11 +462,10 @@ void handleClientRequests (Server* server)
 
         // Always scan for the socket listening for new clients
         FD_SET(server->sockfd, &read_fds);
-
+/*
         // Also scan for all the possibly ready clients
         for (int i = 0; i < server->parameters.max_nb_clients; i++)
         {
-            // TODO: use a better data structure to store clients...? Doubly-linked list?
             Client* current_client = server->clients[i];
             if (current_client == NULL)
                 continue;
@@ -427,6 +474,19 @@ void handleClientRequests (Server* server)
                 FD_SET(current_client->fd, &read_fds);
             if (current_client->state == STATE_ANSWERING)
                 FD_SET(current_client->fd, &write_fds);
+        }
+*/
+        current_client = server->clients;
+        while (current_client != NULL)
+        {
+            current_state = current_client->state;
+
+            if (current_state == STATE_WAITING_FOR_REQUEST)
+                FD_SET(current_client->fd, &read_fds);
+            if (current_state == STATE_ANSWERING)
+                FD_SET(current_client->fd, &write_fds);
+
+            current_client = current_client->next;
         }
 
         printf("Before select() [sockfd = %d, nb_clients = %d]:\n",
@@ -438,10 +498,22 @@ void handleClientRequests (Server* server)
 
         // Some debug printing :)
         printServer(server);
-        printf("%d file descriptor(s) ready!\n", nb_ready_fds);
 
-        // Wait for a current client's input
-        // TODO: handle write operations as well!  
+        // Read/write from/to ready clients
+        current_client = server->clients;
+        while (current_client != NULL)
+        {
+            current_fd = current_client->fd;
+
+            if (FD_ISSET(current_fd, &read_fds))
+                readFromClient(server, current_client);
+
+            if (FD_ISSET(current_fd, &write_fds))
+                writeToClient(server, current_client);
+
+            current_client = current_client->next;
+        }
+/*
         for (int i = 0; i < server->parameters.max_nb_clients; i++)
         {
             Client* current_client = server->clients[i];
@@ -458,7 +530,7 @@ void handleClientRequests (Server* server)
             if (FD_ISSET(current_fd, &write_fds))
                 writeToClient(server, current_client);
         }
-
+*/
         // If sockfd is ready, accept a new client
         if (FD_ISSET(server->sockfd, &read_fds))
         {
