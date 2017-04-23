@@ -40,6 +40,15 @@ typedef enum HttpCode {
     HTTP_NO_CODE // No code needed (i.e. incomming message)
 } HttpCode;
 
+typedef enum HttpRequestType {
+    HTTP_ORIGIN_FORM,    // Standard
+    HTTP_ABSOLUTE_FORM,  // For proxies, not implemented
+    HTTP_AUTHORITY_FORM, // For CONNECT, not implemented
+    HTTP_ASTERISK_FORM,  // Only for OPTIONS
+    
+    HTTP_NO_REQUEST_TYPE
+}
+
 // Structure representing a HTTP header
 // It can be used for both incomming and outgoing messages!
 typedef struct HttpHeader {
@@ -47,7 +56,9 @@ typedef struct HttpHeader {
     HttpMethod  method;
     HttpCode    code; 
 
-    char* field_example;
+    HttpRequestType requestType;
+    char* requestTarget;
+    char* query;
     char* field_example_2;
 } HttpHeader;
 
