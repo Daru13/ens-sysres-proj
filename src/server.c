@@ -449,7 +449,7 @@ void handleClientRequests (Server* server)
     // List of file descriptors to wait for them to be ready
     fd_set read_fds, write_fds;
 
-    // Client reference, used when looping voer all the clients
+    // Client reference, used when looping over all the clients
     Client*     current_client;
     int         current_fd;
     ClientState current_state;
