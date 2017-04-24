@@ -140,7 +140,7 @@ void printClient (const Client* client)
 {
     // To complete?
     printSubtitle("Client (fd: %d)", client->fd);
-    printf("| slot_index: %d\n", client->slot_index);
+    //printf("| slot_index: %d\n", client->slot_index);
     printf("| state: %s\n", getClientStateAsText(client->state));
     printf("| read_buffer: ofs = %d, length = %d\n",
         client->read_buffer_message_length, client->read_buffer_message_offset);
@@ -218,16 +218,14 @@ void printServer (const Server* server)
     printf("nb_clients: %d\n", server->nb_clients);
     printf("max_fd: %d\n", server->max_fd);
     printf("\n");
-/*
-    for (int i = 0; i < server->parameters.max_nb_clients; i++)
-    {
-        Client* current_client = server->clients[i];
-        if (current_client == NULL)
-            continue;
 
+    Client* current_client = server->clients;
+    while (current_client != NULL)
+    {
         printClient(current_client);
+        current_client = current_client->next;
     }
-*/        
+       
     printf("\n");
 
     // Print parameters as well?
@@ -308,8 +306,8 @@ void removeClientFromServer (Server* server, Client* client)
     if (client->previous != NULL)
         client->previous->next = client->next;
 
-    // If the server pointed on this client (i.e. it was the first client),
-    // make it point on the next one
+    // If the server pointed to this client (i.e. it was the first client),
+    // make it point to the next one
     if (server->clients == client)
         server->clients = client->next;
 
@@ -447,21 +445,33 @@ void handleClientRequests (Server* server)
         handleErrorAndExit("handleClientRequests() failed: server is not started");
 
     // List of file descriptors to wait for them to be ready
-    fd_set read_fds, write_fds;
+    //fd_set read_fds, write_fds;
 
     // Client reference, used when looping over all the clients
     Client*     current_client;
-    int         current_fd;
+    //int         current_fd;
     ClientState current_state;
 
     // Indefinitely loop, waiting for new/ready clients
     for (;;)
     {
+/*
         FD_ZERO(&read_fds);
         FD_ZERO(&write_fds);
 
         // Always scan for the socket listening for new clients
         FD_SET(server->sockfd, &read_fds);
+*/
+        struct pollfd* polled_sockets = calloc(server->nb_clients + 1,
+                                               sizeof(struct pollfd));
+        if (polled_sockets == NULL)
+            handleErrorAndExit("calloc() failed in handleClientRequests");
+
+        // Always poll the socket listening for new clients IN FIRST POSITION
+        int nb_polled_sockets    = 1;
+        polled_sockets[0].fd     = server->sockfd;
+        polled_sockets[0].events = POLLIN;
+
 /*
         // Also scan for all the possibly ready clients
         for (int i = 0; i < server->parameters.max_nb_clients; i++)
@@ -476,30 +486,112 @@ void handleClientRequests (Server* server)
                 FD_SET(current_client->fd, &write_fds);
         }
 */
+        
         current_client = server->clients;
         while (current_client != NULL)
         {
             current_state = current_client->state;
+            switch (current_state)
+            {
+                case STATE_WAITING_FOR_REQUEST:
+                printf("adding client fd %d for POLLIN\n", current_client->fd);
+                    polled_sockets[nb_polled_sockets].fd     = current_client->fd;
+                    polled_sockets[nb_polled_sockets].events = POLLIN;
+                    break;
 
-            if (current_state == STATE_WAITING_FOR_REQUEST)
-                FD_SET(current_client->fd, &read_fds);
-            if (current_state == STATE_ANSWERING)
-                FD_SET(current_client->fd, &write_fds);
+                case STATE_ANSWERING:
+                 printf("adding client fd %d for POLLOUT\n", current_client->fd);
+                    polled_sockets[nb_polled_sockets].fd     = current_client->fd;
+                    polled_sockets[nb_polled_sockets].events = POLLOUT;
+                    break;
 
+                default:
+                    // Otherwise, the client should not be polled
+                    polled_sockets[nb_polled_sockets].fd = POLL_NO_POLLING;
+                    break;
+            }
+
+            nb_polled_sockets++;
             current_client = current_client->next;
         }
 
-        printf("Before select() [sockfd = %d, nb_clients = %d]:\n",
+        printf("Before poll() [sockfd = %d, nb_clients = %d]:\n",
                server->sockfd, server->nb_clients);
-
+/*
         int nb_ready_fds = select(server->max_fd + 1, &read_fds, &write_fds, NULL, NULL);
         if (nb_ready_fds < 0)
             handleErrorAndExit("select() failed");
+*/
+        int nb_ready_sockets = poll(polled_sockets, nb_polled_sockets, POLL_NO_TIMEOUT);
+        if (nb_ready_sockets < 0)
+            handleErrorAndExit("poll() failed");
+
+        // Keep track of the position in the pollfd array
+        // The first one must be checked in the end, as it listens for new clients
+        int polled_sockets_index = 1; 
+
+        int nb_handled_sockets   = 0;
 
         // Some debug printing :)
         printServer(server);
 
-        // Read/write from/to ready clients
+        // Read/write from/to ready clients, according to poll() revents fields
+        current_client = server->clients;
+        while (current_client != NULL)
+        {
+            // In case of current client's deletion, next one must be saved now,
+            // so that the lopping proprely continue even if it is deleted
+            Client* next_client = current_client->next;
+            printf("*** Polling check ***\ncurrent_client: %p\nnext_client: %p\nhandled/ready: %d/%d\n\n",
+                (void*) current_client, (void*) next_client, nb_handled_sockets, nb_ready_sockets);
+
+            current_state = current_client->state;
+
+            printf("revents (IN: %d, OUT: %d, HUP: %d): %d\n",
+                (int) POLLIN, (int) POLLOUT, (int) POLLHUP, polled_sockets[polled_sockets_index].revents);
+
+            // Check if the client closed the socket (meaning it should be removed)
+            if (POLLHUP & polled_sockets[polled_sockets_index].revents)
+            {
+                removeClientFromServer(server, current_client);
+            }
+
+            // Otherwise, check for regular read/write events
+            else
+            {
+                switch (current_state)
+                {
+                    case STATE_WAITING_FOR_REQUEST:
+                        if (POLLIN & polled_sockets[polled_sockets_index].revents) {
+                            readFromClient(server, current_client);
+                        
+                            printf("POLLIN fd: %d\n", polled_sockets[polled_sockets_index].fd);
+                            nb_handled_sockets++;
+                        }
+                        break;
+
+                    case STATE_ANSWERING:
+                        if (POLLOUT & polled_sockets[polled_sockets_index].revents) {
+                            writeToClient(server, current_client);
+                        
+                            printf("POLLOUT fd: %d\n", polled_sockets[polled_sockets_index].fd);
+                            nb_handled_sockets++;
+                        }
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+
+            // If all ready clients have been handled, exit this loop
+            if (nb_handled_sockets == nb_ready_sockets)
+                break;
+
+            polled_sockets_index++;
+            current_client = next_client;
+        }
+/*
         current_client = server->clients;
         while (current_client != NULL)
         {
@@ -513,6 +605,7 @@ void handleClientRequests (Server* server)
 
             current_client = current_client->next;
         }
+*/
 /*
         for (int i = 0; i < server->parameters.max_nb_clients; i++)
         {
@@ -531,11 +624,21 @@ void handleClientRequests (Server* server)
                 writeToClient(server, current_client);
         }
 */
+        // If the server's sockfd is ready, accept a new client
+        if (POLLIN & polled_sockets[0].revents)
+        {
+            Client* new_client = acceptNewClient(server);
+            printf("New client (fd = %d) has been accepted.\n", new_client->fd);
+        }
+
+/*
         // If sockfd is ready, accept a new client
         if (FD_ISSET(server->sockfd, &read_fds))
         {
             Client* new_client = acceptNewClient(server);
             printf("New client (fd = %d) has been accepted.\n", new_client->fd);
         }
-    }  
+*/ 
+        free(polled_sockets);
+    }
 }

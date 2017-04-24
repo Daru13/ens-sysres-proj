@@ -20,7 +20,7 @@ typedef struct Client {
     struct sockaddr_in address;
 
     // TODO: change/remove?
-    int slot_index; // Position in the server's client array
+    // int slot_index; // Position in the server's client array
 
     // TODO: use poll()
     // struct pollfd poll_slot
@@ -72,9 +72,10 @@ typedef struct Server {
 #define SERV_DEFAULT_WRITE_BUF_SIZE   512 // bytes
 
 // Named, useful constants
-#define FD_NO_CLIENT -1
-
+#define FD_NO_CLIENT     -1
 #define NO_ASSIGNED_SLOT -1
+#define POLL_NO_TIMEOUT  -1
+#define POLL_NO_POLLING  -1
 
 // -----------------------------------------------------------------------------
 
