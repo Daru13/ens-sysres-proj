@@ -29,6 +29,7 @@
 
 #define COLOR_ON_STDERR        /* comment to remove */
 #define ERROR_COLOR            COLOR_BOLD_RED
+#define WARNING_COLOR          COLOR_BOLD_YELLOW
 
 // -----------------------------------------------------------------------------
 
@@ -48,5 +49,6 @@ void printColor (const char* color, const char* format, ...);
 void printSubtitle (const char* format, ...);
 void printTitle (const char* format, ...);
 void printError (const char* format, ...);
+void printWarning (const char* format, ...);
 
 #endif

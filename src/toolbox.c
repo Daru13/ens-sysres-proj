@@ -117,3 +117,22 @@ void printError (const char* format, ...)
 
     va_end(args);
 }
+
+void printWarning (const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+
+    #ifdef COLOR_ON_STDERR
+    fprintf(stderr, "%s", WARNING_COLOR);
+    #endif
+
+    vfprintf(stderr, format, args);
+    fprintf(stderr, "\n");
+
+    #ifdef COLOR_ON_STDERR
+    fprintf(stderr, "%s", COLOR_RESET);
+    #endif
+
+    va_end(args);
+}
