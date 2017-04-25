@@ -124,14 +124,14 @@ int fillHeaderWith(HttpHeader* header, char* buffer)
     
     if (header->version != HTTP_V1_1)
     {
-        // Probably syntax error
-        // TODO : check if it's not just a version we don't implement and don't have heard from, which SHOULD be a 505 error.
         switch (header->version)
         {
             case HTTP_V1_0:
             case HTTP_V2_0:
                 return 505;
             default:
+                // Probably syntax error
+                // TODO : check if it's not just a version we don't implement and don't have heard from, which SHOULD be a 505 error.
                 return 400;
         }
     }
