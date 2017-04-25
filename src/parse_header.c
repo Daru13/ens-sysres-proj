@@ -135,5 +135,8 @@ int fillHeaderWith(HttpHeader* header, char* buffer)
                 return 400;
         }
     }
+
+    pos = end+1;
+    // NOW we should be at the start of the header fields.
 }
 
