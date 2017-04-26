@@ -197,10 +197,11 @@ void defaultInitServer (Server* server)
     struct sockaddr_in address = getLocalAddress(SERV_DEFAULT_PORT);
 
     ServParameters parameters;
-    parameters.queue_max_length  = SERV_DEFAULT_QUEUE_MAX_LENGTH;
-    parameters.max_nb_clients    = SERV_DEFAULT_MAX_NB_CLIENTS;
-    parameters.read_buffer_size  = SERV_DEFAULT_READ_BUF_SIZE;
-    parameters.write_buffer_size = SERV_DEFAULT_WRITE_BUF_SIZE;
+    parameters.queue_max_length    = SERV_DEFAULT_QUEUE_MAX_LENGTH;
+    parameters.max_nb_clients      = SERV_DEFAULT_MAX_NB_CLIENTS;
+    parameters.read_buffer_size    = SERV_DEFAULT_READ_BUF_SIZE;
+    parameters.write_buffer_size   = SERV_DEFAULT_WRITE_BUF_SIZE;
+    parameters.root_data_directory = SERV_DEFAULT_ROOT_DATA_DIR;
 
     initServer(server, sockfd, address, parameters);
 }

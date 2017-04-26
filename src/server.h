@@ -42,10 +42,11 @@ typedef struct Client {
 
 // Structures used to represent a server
 typedef struct ServParameters {
-    int queue_max_length;
-    int max_nb_clients;
-    int read_buffer_size;
-    int write_buffer_size;
+    int   queue_max_length;
+    int   max_nb_clients;
+    int   read_buffer_size;
+    int   write_buffer_size;
+    char* root_data_directory;
     // ...
 } ServParameters;
 
@@ -70,6 +71,8 @@ typedef struct Server {
 #define SERV_DEFAULT_MAX_NB_CLIENTS   64 
 #define SERV_DEFAULT_READ_BUF_SIZE    512 // bytes
 #define SERV_DEFAULT_WRITE_BUF_SIZE   512 // bytes
+
+#define SERV_DEFAULT_ROOT_DATA_DIR    "./www"
 
 // Named, useful constants
 #define FD_NO_CLIENT     -1
