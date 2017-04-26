@@ -1,4 +1,6 @@
 #include <string.h>
+#include <ctype.h>
+
 #include "http.h"
 
 #define ISOLATE(string, position, code) {\
@@ -13,6 +15,10 @@
     returnValue = code;\
     string[position] = ISOLATE_save;\
 }
+#define CHECK_SYNTAX {\
+    if (end == NULL)\
+        return 400;\
+}
 
 typedef struct Option
 {
@@ -20,9 +26,26 @@ typedef struct Option
     void* value;
 }
 
-// last Option is default case, it has NULL for key
-void* doSwitch(const Option opt[], char* str, int compLen = -1)
+/**
+ * In @opt, last Option is default, it has NULL for key.
+ * If case_unsensitive is set to true, the @key entries of @opt should be UPPERCASE or won't be recognized.
+ */
+void* doSwitch(const Option opt[], char* str, bool case_unsensitive = false, int compLen = -1)
 {
+    if (case_unsensitive)
+    {
+        char* upperCase;
+        if (compLen != -1)
+            compLen = strlen(str)+1;
+        upperCase = malloc((compLen+1)*sizeof(char));
+        for (int i = 0; i < compLen; ++i)
+            upperCase[i] = toupper(str[i]);
+        upperCase[compLen] = '\0';
+
+        void* ret = doSwitch(opt, upperCase);
+        free(upperCase);
+        return ret;
+    }
     if (compLen != -1)
     {
         void* ret;
@@ -39,7 +62,15 @@ void* doSwitch(const Option opt[], char* str, int compLen = -1)
 Option methodSwitch[] = {
 { "GET", HTTP_GET },
 { "HEAD", HTTP_HEAD },
+{ "POST", HTTP_POST },
 { NULL, HTTP_UNKNOWN_METHOD }
+}
+
+Option versionSwitch[] = {
+{ "HTTP/1.0", HTTP_V1_0 },
+{ "HTTP/1.1", HTTP_V1_1 },
+{ "HTTP/2.0", HTTP_V2_0 },
+{ NULL, HTTP_UNKNOWN_VERSION }
 }
 
 // I swear i'll put the buffer back in its state after i've dealt with it
@@ -48,10 +79,12 @@ int fillHeaderWith(HttpHeader* header, char* buffer)
     char* pos = buffer;
     
     char* end = strchr(pos, ' ');
-    header->method = doSwitch(methodSwitch, pos, (end - pos + 1));
+    CHECK_SYNTAX
+    header->method = doSwitch(methodSwitch, pos, true, (end - pos + 1));
     
     pos = end + 1;
     end = strchr(pos, ' ');
+    CHECK_SYNTAX
     
     if (end-pos == 1 && *pos == '*')
     {
@@ -85,5 +118,22 @@ int fillHeaderWith(HttpHeader* header, char* buffer)
     
     pos = end + 1;
     end = strchr(pos, '\n');
+    CHECK_SYNTAX
+    
+    header->version = doSwitch(optionSwitch, pos, true, (end-pos+1));
+    
+    if (header->version != HTTP_V1_1)
+    {
+        switch (header->version)
+        {
+            case HTTP_V1_0:
+            case HTTP_V2_0:
+                return 505;
+            default:
+                // Probably syntax error
+                // TODO : check if it's not just a version we don't implement and don't have heard from, which SHOULD be a 505 error.
+                return 400;
+        }
+    }
 }
 
