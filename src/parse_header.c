@@ -1,19 +1,20 @@
+#include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
 
 #include "http.h"
 
-#define ISOLATE(string, position, code) {\
-    char ISOLATE_save = (string)[position];\
-    string[position] = '\0';\
+#define ISOLATE(ptr, code) {\
+    char ISOLATE_save = *ptr;\
+    *ptr = '\0';\
     code;\
-    string[position] = ISOLATE_save;\
+    *ptr = ISOLATE_save;\
 }
-#define ISOLATE_CALL(string, position, code, returnValue) {\
-    char ISOLATE_save = (string)[position];\
-    string[position] = '\0';\
+#define ISOLATE_CALL(ptr, code, returnValue) {\
+    char ISOLATE_save = *ptr;\
+    *ptr = '\0';\
     returnValue = code;\
-    string[position] = ISOLATE_save;\
+    *ptr = ISOLATE_save;\
 }
 #define CHECK_SYNTAX {\
     if (end == NULL)\
@@ -23,33 +24,40 @@
 typedef struct Option
 {
     char* key;
-    void* value;
-}
+    int value;
+} Option;
+
+typedef int bool;
+const bool true = 1;
+const bool false = 0;
 
 /**
  * In @opt, last Option is default, it has NULL for key.
  * If case_unsensitive is set to true, the @key entries of @opt should be UPPERCASE or won't be recognized.
  */
-void* doSwitch(const Option opt[], char* str, bool case_unsensitive = false, int compLen = -1)
+int doSwitch(const Option opt[], char* str, bool case_unsensitive, char* posEnd)
 {
     if (case_unsensitive)
     {
         char* upperCase;
-        if (compLen != -1)
+        int compLen;
+        if (posEnd == NULL)
             compLen = strlen(str)+1;
+        else
+            compLen = posEnd - str + 1;
         upperCase = malloc((compLen+1)*sizeof(char));
         for (int i = 0; i < compLen; ++i)
             upperCase[i] = toupper(str[i]);
         upperCase[compLen] = '\0';
 
-        void* ret = doSwitch(opt, upperCase);
+        int ret = doSwitch(opt, upperCase, false, NULL);
         free(upperCase);
         return ret;
     }
-    if (compLen != -1)
+    if (posEnd != NULL)
     {
-        void* ret;
-        ISOLATE_CALL(str, compLen, doSwitch(opt, str), ret);
+        int ret;
+        ISOLATE_CALL(posEnd, doSwitch(opt, str, false, NULL), ret);
         return ret;
     }
     int optActu = 0;
@@ -59,19 +67,33 @@ void* doSwitch(const Option opt[], char* str, bool case_unsensitive = false, int
     return opt[optActu].value;
 }
 
+typedef enum HttpHeaderField {
+    HEAD_HOST,
+    HEAD_ACCEPT,
+
+    HEAD_UNKNOWN
+} HttpHeaderField;
+
+
 Option methodSwitch[] = {
 { "GET", HTTP_GET },
 { "HEAD", HTTP_HEAD },
 { "POST", HTTP_POST },
 { NULL, HTTP_UNKNOWN_METHOD }
-}
+};
 
 Option versionSwitch[] = {
 { "HTTP/1.0", HTTP_V1_0 },
 { "HTTP/1.1", HTTP_V1_1 },
 { "HTTP/2.0", HTTP_V2_0 },
 { NULL, HTTP_UNKNOWN_VERSION }
-}
+};
+
+Option headerSwitch[] = {
+{ "HOST", HEAD_HOST },
+{ "ACCEPT", HEAD_ACCEPT },
+{ NULL, HEAD_UNKNOWN }
+};
 
 // I swear i'll put the buffer back in its state after i've dealt with it
 int fillHeaderWith(HttpHeader* header, char* buffer)
@@ -80,7 +102,7 @@ int fillHeaderWith(HttpHeader* header, char* buffer)
     
     char* end = strchr(pos, ' ');
     CHECK_SYNTAX
-    header->method = doSwitch(methodSwitch, pos, true, (end - pos + 1));
+    header->method = doSwitch(methodSwitch, pos, true, end);
     
     pos = end + 1;
     end = strchr(pos, ' ');
@@ -96,7 +118,7 @@ int fillHeaderWith(HttpHeader* header, char* buffer)
         header->requestType = HTTP_ORIGIN_FORM;
         
         char* queryPos;
-        ISOLATE_CALL(pos, (end-pos+1), strchr(pos, '?'), queryPos);
+        ISOLATE_CALL(end, strchr(pos, '?'), queryPos);
         if (queryPos == NULL)
         {
             int len = end-pos+1;
@@ -110,7 +132,7 @@ int fillHeaderWith(HttpHeader* header, char* buffer)
             header->requestTarget = malloc(len*sizeof(char));
             strncpy(header->requestTarget, pos, len-1);
             header->requestTarget[len-1] = '\0';
-            header->query = malloc((end-queryPos)*sizeof(char))
+            header->query = malloc((end-queryPos)*sizeof(char));
             strncpy(header->query, queryPos+1, (end-queryPos-1));
             header->query[end-queryPos-1] = '\0';
         }
@@ -120,7 +142,7 @@ int fillHeaderWith(HttpHeader* header, char* buffer)
     end = strchr(pos, '\n');
     CHECK_SYNTAX
     
-    header->version = doSwitch(optionSwitch, pos, true, (end-pos+1));
+    header->version = doSwitch(versionSwitch, pos, true, end);
     
     if (header->version != HTTP_V1_1)
     {
@@ -138,5 +160,31 @@ int fillHeaderWith(HttpHeader* header, char* buffer)
 
     pos = end+1;
     // NOW we should be at the start of the header fields.
+
+    while (*pos != '\n')
+    {
+        char* fieldName = pos;
+        end = strchr(pos, ':');
+        CHECK_SYNTAX
+        char* endName = end; 
+        char* fieldValue = endName+1;
+        while (*fieldValue == ' ' || *fieldValue == '\t')
+            fieldValue++;
+        end = strchr(fieldValue, '\n');
+        CHECK_SYNTAX
+        char* endValue = end - 1; 
+        while (*endValue == ' ' || *endValue == '\t')
+            endValue--;
+
+        HttpHeaderField header = doSwitch(headerSwitch, fieldName, true, endName+1);
+    }
+
+    return 200;
 }
+
+
+
+
+
+
 
