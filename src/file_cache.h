@@ -10,7 +10,7 @@ typedef struct File {
     char* name;
 
     char* content;
-    int   length;
+    int   size;
 
     // Encoding or more?
 } File;
@@ -37,9 +37,13 @@ typedef struct FileCache {
 
 // -----------------------------------------------------------------------------
 
+#define MAX_PATH_LENGTH 1024
+
+// -----------------------------------------------------------------------------
+
 File* createFile ();
-void initFile (File* file, char* name, char* content, int length);
-File* createAndInitFile (char* name, char* content, int length);
+void initFile (File* file, char* name, char* content, int size);
+File* createAndInitFile (char* name, char* content, int size);
 void deleteFile (File* file);
 
 Folder* createFolder ();
