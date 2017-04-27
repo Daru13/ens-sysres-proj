@@ -16,10 +16,12 @@
         return 400;\
 }
 
+typedef int OptionValue;
+
 typedef struct Option
 {
     char* key;
-    int value;
+    OptionValue value;
 } Option;
 
 typedef int bool;
@@ -30,7 +32,7 @@ const bool false = 0;
  * In @opt, last Option is default, it has NULL for key.
  * If case_unsensitive is set to true, the @key entries of @opt should be UPPERCASE or won't be recognized.
  */
-int doSwitch(const Option opt[], char* str, bool case_unsensitive, char* posEnd)
+OptionValue doSwitch(const Option opt[], char* str, bool case_unsensitive, char* posEnd)
 {
     if (case_unsensitive)
     {
@@ -45,13 +47,13 @@ int doSwitch(const Option opt[], char* str, bool case_unsensitive, char* posEnd)
             upperCase[i] = toupper(str[i]);
         upperCase[compLen] = '\0';
 
-        int ret = doSwitch(opt, upperCase, false, NULL);
+        OptionValue ret = doSwitch(opt, upperCase, false, NULL);
         free(upperCase);
         return ret;
     }
     if (posEnd != NULL)
     {
-        int ret;
+        OptionValue ret;
         ISOLATE(posEnd, ret = doSwitch(opt, str, false, NULL));
         return ret;
     }
@@ -171,7 +173,7 @@ int fillHeaderWith(HttpHeader* header, char* buffer)
         while (*endValue == ' ' || *endValue == '\t')
             endValue--;
 
-        HttpHeaderField header = doSwitch(headerSwitch, fieldName, true, endName+1);
+        HttpHeaderField headerField = doSwitch(headerSwitch, fieldName, true, endName+1);
     }
 
     return 200;
