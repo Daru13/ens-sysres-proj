@@ -11,6 +11,7 @@ typedef enum HttpVersion {
 
 typedef enum HttpMethod {
     HTTP_GET,
+    HTTP_HEAD,
     HTTP_POST,
 
     // TODO: add more methods :)!
