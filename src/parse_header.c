@@ -10,12 +10,7 @@
     code;\
     *ptr = ISOLATE_save;\
 }
-#define ISOLATE_CALL(ptr, code, returnValue) {\
-    char ISOLATE_save = *ptr;\
-    *ptr = '\0';\
-    returnValue = code;\
-    *ptr = ISOLATE_save;\
-}
+// #define ISOLATE_CALL(ptr, code, returnValue) ISOLATE(ptr, returnValue = code)
 #define CHECK_SYNTAX {\
     if (end == NULL)\
         return 400;\
@@ -57,7 +52,7 @@ int doSwitch(const Option opt[], char* str, bool case_unsensitive, char* posEnd)
     if (posEnd != NULL)
     {
         int ret;
-        ISOLATE_CALL(posEnd, doSwitch(opt, str, false, NULL), ret);
+        ISOLATE(posEnd, ret = doSwitch(opt, str, false, NULL));
         return ret;
     }
     int optActu = 0;
@@ -118,7 +113,7 @@ int fillHeaderWith(HttpHeader* header, char* buffer)
         header->requestType = HTTP_ORIGIN_FORM;
         
         char* queryPos;
-        ISOLATE_CALL(end, strchr(pos, '?'), queryPos);
+        ISOLATE(end, queryPos = strchr(pos, '?'));
         if (queryPos == NULL)
         {
             int len = end-pos+1;
