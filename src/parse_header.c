@@ -172,8 +172,36 @@ int fillHeaderWith(HttpHeader* header, char* buffer)
         char* endValue = end - 1; 
         while (*endValue == ' ' || *endValue == '\t')
             endValue--;
-
+        endValue++;
+        // value = [fieldValue : endValue[
+        int lenValue = (endValue - fieldValue);
         HttpHeaderField headerField = doSwitch(headerSwitch, fieldName, true, endName+1);
+        switch (headerField)
+        {
+            case HEAD_HOST:
+                if (header->host)
+                    return 400;
+                header->host = malloc((lenValue+1)*sizeof(char));
+                strncpy(header->host, fieldValue, lenValue);
+                header->host[lenValue] = '\0';
+                break;
+            case HEAD_ACCEPT:
+                if (header->accept != NULL)
+                {
+                    int lenInit = strlen(header->accept);
+                    char* new = realloc(header->accept, (lenInit+1+lenValue+1)*sizeof(char));
+                    if (new == NULL)
+                        return 500;
+                    header->accept = new;
+                    header->accept[lenInit] = ',';
+                    header->accept[lenInit+1] = '\0';
+                    strncat(header->accept, fieldValue, lenValue);
+                    header->accept[lenInit+1+lenValue] = '\0';
+                }
+                break;
+            default:
+                break;
+        }
     }
 
     return 200;

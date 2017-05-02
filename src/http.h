@@ -60,6 +60,8 @@ typedef struct HttpHeader {
     HttpRequestType requestType;
     char* requestTarget;
     char* query;
+    char* host;
+    char* accept;
 } HttpHeader;
 
 // Structure representing a chunk of (text) data
