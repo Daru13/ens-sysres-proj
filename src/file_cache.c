@@ -189,20 +189,36 @@ Folder* recursivelyBuildFolderFromDisk (char* path)
     int   nb_subfolders = 0;
     char* current_path  = malloc(MAX_PATH_LENGTH * sizeof(char));
     if (current_path == NULL)
-        handleErrorAndExit("malloc() failed");
+        handleErrorAndExit("malloc() failed in recursivelyBuildFolderFromDisk()");
     struct stat file_info;
 
     struct dirent* current_entry = readdir(directory);
     while (current_entry != NULL)
     {
+        char* current_entry_name = current_entry->d_name;
+
+        // Ignore special directories "." (current) and ".." (parent)
+        if ((! strcmp(current_entry_name,  "."))
+        ||  (! strcmp(current_entry_name, "..")))
+        {
+            // Immediately move to the next entry
+            current_entry = readdir(directory);
+            continue;
+        }
+
         // Build the path to the current entry
         current_path = strcpy(current_path, path);
-        current_path = strcat(current_path, current_entry->d_name);
+        current_path = strcat(current_path, "/");
+        current_path = strcat(current_path, current_entry_name);
 
         // Get info on the current entry
         int return_value = stat(current_path, &file_info);
         if (return_value < 0)
             handleErrorAndExit("stat() failed in recursivelyBuildFolderFromDisk()");
+
+        printf("Current entry: %s (DIR: %s)\n", current_entry_name,
+               (S_ISDIR(file_info.st_mode) ? "true" : "false"));
+        printf("Current path: %s\n", current_path);
 
         // Check which kind of file the current entry is, 
         // and update counters accordingly
@@ -216,16 +232,28 @@ Folder* recursivelyBuildFolderFromDisk (char* path)
     }
 
     // Create an actual Folder structure, and fill it recursively
+    printf("Creating new folder with %d file(s) and %d subfolder(s)...\n",
+           nb_files, nb_subfolders);
     Folder* new_folder = createEmptyFolder(path, nb_files, nb_subfolders);
+    
     rewinddir(directory);
-
     current_entry = readdir(directory);
     while (current_entry != NULL)
     {
         char* current_entry_name = current_entry->d_name;
 
+        // Ignore special directories "." (current) and ".." (parent)
+        if ((! strcmp(current_entry_name,  "."))
+        ||  (! strcmp(current_entry_name, "..")))
+        {
+            // Immediately move to the next entry
+            current_entry = readdir(directory);
+            continue;
+        }
+
         // Build the path to the current entry
         current_path = strcpy(current_path, path);
+        current_path = strcat(current_path, "/");
         current_path = strcat(current_path, current_entry_name);
 
         // Get info on the current entry
