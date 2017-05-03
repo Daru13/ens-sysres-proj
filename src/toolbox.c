@@ -136,3 +136,30 @@ void printWarning (const char* format, ...)
 
     va_end(args);
 }
+
+// -----------------------------------------------------------------------------
+// STRING-RELATED FUNCTIONS
+// -----------------------------------------------------------------------------
+
+char* extractDirectoryNameFromPath (const char* path)
+{  
+    // Find the last '/' character position
+    int last_slash_index = 0;
+    int current_index    = 1;
+    while (path[current_index] != '\0')
+    {
+        if (path[current_index] == '/')
+            last_slash_index = current_index;
+
+        current_index++;
+    }
+
+    // Copy the part of the string following the last slash into a fresh one
+    char* directory_name = malloc((current_index - last_slash_index + 1) * sizeof(char));
+    if (directory_name == NULL)
+        handleErrorAndExit("malloc() failed in extractDirectoryNameFromPath()");
+
+    directory_name = strcpy(directory_name, path + last_slash_index + 1);
+
+    return directory_name;
+}

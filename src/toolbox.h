@@ -51,4 +51,6 @@ void printTitle (const char* format, ...);
 void printError (const char* format, ...);
 void printWarning (const char* format, ...);
 
+char* extractDirectoryNameFromPath (const char* path);
+
 #endif
