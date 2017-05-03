@@ -66,6 +66,7 @@ bool initFileCache (FileCache* cache, Folder* root, const int max_size);
 void deleteFileCache (FileCache* cache);
 void printFileCache (const FileCache* cache);
 
+void setFileType (File* file, char* path);
 Folder* recursivelyBuildFolderFromDisk (char* path);
 FileCache* buildCacheFromDisk (char* root_path, const int max_size);
 
