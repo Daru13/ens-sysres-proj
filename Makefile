@@ -4,7 +4,7 @@ CCFLAGS = -g -W -Wall -pedantic -std=c99
 
 ##### THIS LIST MUST BE UPDATED #####
 # List of all  object files which must be produced before any binary
-OBJS = build/toolbox.o build/file_cache.o build/http.o build/server.o build/main.o
+OBJS = build/toolbox.o build/file_cache.o build/parse_header.o build/http.o build/server.o build/main.o
 
 # Dependencies and compiling rules
 all: server
@@ -12,8 +12,7 @@ all: server
 server: $(OBJS)
 	$(CC) $(CCFLAGS) $(OBJS) -o webserver
 
-
-build/main.o: src/main.c src/main.h build/server.o build/file_cache.o build/toolbox.o
+build/main.o: src/main.c src/main.h build/server.o build/file_cache.o build/parse_header.o build/toolbox.o
 	$(CC) $(CCFLAGS) -c src/main.c -o build/main.o
 
 build/server.o: src/server.c src/server.h build/toolbox.o
@@ -27,6 +26,9 @@ build/file_cache.o: src/file_cache.c src/file_cache.h build/toolbox.o
 
 build/toolbox.o: src/toolbox.c src/toolbox.h
 	$(CC) $(CCFLAGS) -c src/toolbox.c -o build/toolbox.o
+
+build/parse_header.o: src/parse_header.c src/parse_header.h
+	$(CC) $(CCFLAGS) -c src/parse_header.c -o build/parse_header.o
 
 # Cleaning rule
 clean:
