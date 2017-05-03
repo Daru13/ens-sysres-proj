@@ -27,6 +27,14 @@ void initFile (File* file, char* name, char* content, int size)
     file->name    = name;
     file->content = content;
     file->size    = size;
+
+    file->type = malloc(MAX_FILE_TYPE_LENGTH * sizeof(char));
+    if (file->type == NULL)
+        handleErrorAndExit("malloc() failed in initFile()");
+
+    file->encoding = malloc(MAX_FILE_ENCODING_LENGTH * sizeof(char));
+    if (file->encoding == NULL)
+        handleErrorAndExit("malloc() failed in initFile()");
 }
 
 File* createAndInitFile (char* name, char* content, int size)
@@ -41,6 +49,8 @@ void deleteFile (File* file)
 {
     free(file->name);
     free(file->content);
+    free(file->type);
+    free(file->encoding);
 
     free(file);
 }
@@ -176,6 +186,67 @@ void deleteFileCache (FileCache* cache)
 // CACHE BUILDING
 // -----------------------------------------------------------------------------
 
+// TODO: move this elsewhere
+#define PIPE_IN  1
+#define PIPE_OUT 0
+
+// By using Unix program "file", guess the type and then enconding of a file
+// It is ran as a background process (on each call), on the given path
+void setFileType (File* file, char* path)
+{
+    pid_t pipe_fds[2];
+    int return_value = pipe(pipe_fds);
+    if (return_value < 0)
+        handleErrorAndExit("pipe() failed in setFileType()");
+
+    pid_t fork_pid = fork();
+    if (fork_pid < 0)
+        handleErrorAndExit("fork() failed in setFileType()");
+
+    // Child process
+    if (fork_pid == 0)
+    {
+        // Program file must output in its parent's pipe output
+        return_value = close(pipe_fds[PIPE_OUT]);
+        if (return_value < 0)
+            handleErrorAndExit("close() failed in setFileType()");
+
+        return_value = dup2(pipe_fds[PIPE_IN], 1);
+        if (return_value < 0)
+            handleErrorAndExit("close() failed in setFileType()");        
+
+        char* exec_argv[] = {
+            "file",   // Command name (as argv[0])
+            "--mime", // Output "[MIME type]; [MIME encoding]"
+            "--b",    // Do not prepend filename
+            path,     // Path to the file
+            NULL
+        };
+
+        execvp("file", exec_argv);
+        handleErrorAndExit("exec() failed in setFileType()");
+    }
+
+    // Father process
+
+    return_value = close(pipe_fds[PIPE_IN]);
+    if (return_value < 0)
+        handleErrorAndExit("close() failed in setFileType()");
+
+    int nb_bytes_read = read(pipe_fds[PIPE_OUT],
+                             file->type,
+                             MAX_FILE_TYPE_LENGTH - 1);
+    if (nb_bytes_read < 0)
+        handleErrorAndExit("read() failed in setFileType()");
+    file->type[nb_bytes_read] = '\0';
+
+    printf("Pipe output (%d byte(s) read): %s\n", nb_bytes_read, file->type);
+
+    return_value = close(pipe_fds[PIPE_OUT]);
+    if (return_value < 0)
+        handleErrorAndExit("close() failed in setFileType()");
+}
+
 // TODO: split this in smaller functions
 Folder* recursivelyBuildFolderFromDisk (char* path)
 {
@@ -283,6 +354,8 @@ Folder* recursivelyBuildFolderFromDisk (char* path)
             File* new_file_node = createAndInitFile(current_entry_name,
                                                     file_content_buffer,
                                                     current_entry_size);
+            setFileType(new_file_node, current_path);
+
             addFileToFolder(new_folder, new_file_node);
         }
 

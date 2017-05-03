@@ -12,7 +12,8 @@ typedef struct File {
     char* content;
     int   size;
 
-    // Encoding or more?
+    char* type;     // MIME type
+    char* encoding; // May take NO_ENCODING value
 } File;
 
 typedef struct Folder {
@@ -37,7 +38,10 @@ typedef struct FileCache {
 
 // -----------------------------------------------------------------------------
 
-#define MAX_PATH_LENGTH 1024
+#define MAX_PATH_LENGTH          1024
+
+#define MAX_FILE_TYPE_LENGTH     256
+#define MAX_FILE_ENCODING_LENGTH 64
 
 // -----------------------------------------------------------------------------
 
