@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "toolbox.h"
+#include "file_cache.h"
 #include "server.h"
 #include "main.h"
 
@@ -13,11 +14,15 @@ int main (const int argc, const char* argv[])
 
     Server* server = createServer();
     defaultInitServer(server);
-
+/*
     startServer(server);
     handleClientRequests(server);
-
+*/
     // deleteServer(server);
+
+    FileCache* files = buildCacheFromDisk(server->parameters.root_data_directory,
+                                          32 * 1000000);
+
 
     return 0;
 }
