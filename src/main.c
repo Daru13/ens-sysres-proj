@@ -20,9 +20,10 @@ int main (const int argc, const char* argv[])
 */
     // deleteServer(server);
 
-    FileCache* files = buildCacheFromDisk(server->parameters.root_data_directory,
+    FileCache* cache = buildCacheFromDisk(server->parameters.root_data_directory,
                                           32 * 1000000);
-
+    printFileCache(cache);
+    //deleteFileCache(cache);
 
     return 0;
 }

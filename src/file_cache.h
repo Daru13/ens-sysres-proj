@@ -38,6 +38,7 @@ typedef struct FileCache {
 
 // -----------------------------------------------------------------------------
 
+#define MAX_NAME_LENGTH          1024
 #define MAX_PATH_LENGTH          1024
 
 #define MAX_FILE_TYPE_LENGTH     256
@@ -49,18 +50,21 @@ File* createFile ();
 void initFile (File* file, char* name, char* content, int size);
 File* createAndInitFile (char* name, char* content, int size);
 void deleteFile (File* file);
+void printFile (const File* file, const int indent);
 
 Folder* createFolder ();
 void initEmptyFolder (Folder* folder, char* name,
                       const int max_nb_files, const int max_nb_subfolders);
 Folder* createEmptyFolder (char* name, const int max_nb_files, const int max_nb_subfolders);
 void recursivelyDeleteFolder (Folder* folder);
+void recursivelyPrintFolder (const Folder* folder, const int indent);
 int addFileToFolder (Folder* folder, File* file);
 int addSubfolderToFolder (Folder* folder, Folder* subfolder);
 
 FileCache* createFileCache ();
 bool initFileCache (FileCache* cache, Folder* root, const int max_size);
 void deleteFileCache (FileCache* cache);
+void printFileCache (const FileCache* cache);
 
 Folder* recursivelyBuildFolderFromDisk (char* path);
 FileCache* buildCacheFromDisk (char* root_path, const int max_size);

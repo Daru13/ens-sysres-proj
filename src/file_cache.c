@@ -55,6 +55,19 @@ void deleteFile (File* file)
     free(file);
 }
 
+void printFile (const File* file, const int indent)
+{
+    char indent_space[indent + 1];
+    for (int i = 0; i < indent; i++)
+        indent_space[i] = ' ';
+    indent_space[indent] = '\0';
+
+    printf("%s%s (%ssize:%s %d, %stype:%s %s)\n",
+           indent_space, file->name,
+           COLOR_BOLD, COLOR_RESET, file->size,
+           COLOR_BOLD, COLOR_RESET, file->type);
+}
+
 // -----------------------------------------------------------------------------
 
 Folder* createFolder ()
@@ -105,6 +118,25 @@ void recursivelyDeleteFolder (Folder* folder)
     free(folder->subfolders);
 
     free(folder);
+}
+
+void recursivelyPrintFolder (const Folder* folder, const int indent)
+{
+    char indent_space[indent + 1];
+    for (int i = 0; i < indent; i++)
+        indent_space[i] = ' ';
+    indent_space[indent] = '\0';
+
+    printColor(COLOR_BOLD_BLUE, "%s%s\n", indent_space, folder->name);
+
+    // Print the folder's content: files first, subfolders then
+    int new_indent = indent + 2;
+
+    for (int i = 0; i < folder->nb_files; i++)
+        printFile(folder->files[i], new_indent);
+
+    for (int i = 0; i < folder->nb_subfolders; i++)
+        recursivelyPrintFolder(folder->subfolders[i], new_indent);
 }
 
 // Assumes the files array has free space at nb_files index
@@ -182,6 +214,11 @@ void deleteFileCache (FileCache* cache)
     free(cache);
 }
 
+void printFileCache (const FileCache* cache)
+{
+    recursivelyPrintFolder(cache->root, 0);
+}
+
 // -----------------------------------------------------------------------------
 // CACHE BUILDING
 // -----------------------------------------------------------------------------
@@ -218,7 +255,7 @@ void setFileType (File* file, char* path)
         char* exec_argv[] = {
             "file",   // Command name (as argv[0])
             "--mime", // Output "[MIME type]; [MIME encoding]"
-            "--b",    // Do not prepend filename
+            "-0b",    // Do not prepend filename
             path,     // Path to the file
             NULL
         };
@@ -238,7 +275,7 @@ void setFileType (File* file, char* path)
                              MAX_FILE_TYPE_LENGTH - 1);
     if (nb_bytes_read < 0)
         handleErrorAndExit("read() failed in setFileType()");
-    file->type[nb_bytes_read] = '\0';
+    file->type[nb_bytes_read - 1] = '\0';
 
     printf("Pipe output (%d byte(s) read): %s\n", nb_bytes_read, file->type);
 
@@ -305,7 +342,8 @@ Folder* recursivelyBuildFolderFromDisk (char* path)
     // Create an actual Folder structure, and fill it recursively
     printf("Creating new folder with %d file(s) and %d subfolder(s)...\n",
            nb_files, nb_subfolders);
-    Folder* new_folder = createEmptyFolder(path, nb_files, nb_subfolders);
+    char* new_folder_name = extractDirectoryNameFromPath(path);
+    Folder* new_folder = createEmptyFolder(new_folder_name, nb_files, nb_subfolders);
     
     rewinddir(directory);
     current_entry = readdir(directory);
@@ -337,23 +375,27 @@ Folder* recursivelyBuildFolderFromDisk (char* path)
         if (S_ISREG(file_info.st_mode))
         {
             // TODO: check stuff here (bad return values, etc)
-
-            int current_entry_size = file_info.st_size;
+            char* current_file_name = malloc(strlen(current_entry_name) * sizeof(char));
+            if (current_file_name == NULL)
+                handleErrorAndExit("malloc() failed in recursivelyBuildFolderFromDisk()");
+            current_file_name = strcpy(current_file_name, current_entry_name);
+            int   current_file_size = file_info.st_size;
 
             // Copy the file's content into a buffer
-            char* file_content_buffer = malloc(current_entry_size * sizeof(char));
-            if (file_content_buffer == NULL)
+            char* current_file_content = malloc(current_file_size * sizeof(char));
+            if (current_file_content == NULL)
                 handleErrorAndExit("malloc() failed in recursivelyBuildFolderFromDisk()");
 
             FILE* current_file = fopen(current_path, "r");
-            int nb_bytes_read = fread(file_content_buffer, sizeof(char),
-                                      current_entry_size, current_file);
+            int nb_bytes_read = fread(current_file_content, sizeof(char),
+                                      current_file_size, current_file);
             fclose(current_file);
 
             // Create a File structure, and add it to the current folder
-            File* new_file_node = createAndInitFile(current_entry_name,
-                                                    file_content_buffer,
-                                                    current_entry_size);
+            printf("Creating file with name %s...\n", current_entry_name);
+            File* new_file_node = createAndInitFile(current_file_name,
+                                                    current_file_content,
+                                                    current_file_size);
             setFileType(new_file_node, current_path);
 
             addFileToFolder(new_folder, new_file_node);
