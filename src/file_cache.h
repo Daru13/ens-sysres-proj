@@ -44,6 +44,8 @@ typedef struct FileCache {
 #define MAX_FILE_TYPE_LENGTH     256
 #define MAX_FILE_ENCODING_LENGTH 64
 
+#define NOT_FOUND                NULL
+
 // -----------------------------------------------------------------------------
 
 File* createFile ();
@@ -69,5 +71,9 @@ void printFileCache (const FileCache* cache);
 void setFileType (File* file, char* path);
 Folder* recursivelyBuildFolderFromDisk (char* path);
 FileCache* buildCacheFromDisk (char* root_path, const int max_size);
+
+Folder* findSubfolderInFolder (const Folder* folder, const char* subfolder_name);
+File* findFileInFolder (const Folder* folder, const char* file_name);
+File* findFileInCache (const FileCache* cache, char* path);
 
 #endif

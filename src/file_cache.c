@@ -428,3 +428,73 @@ FileCache* buildCacheFromDisk (char* root_path, const int max_size)
 
     return new_cache;
 }
+
+// -----------------------------------------------------------------------------
+// CACHE FETCHING
+// -----------------------------------------------------------------------------
+
+// Find a subfolder in a given folder, thanks to its name
+// If not found, returns NOT_FOUND (NULL alias)
+Folder* findSubfolderInFolder (const Folder* folder, const char* subfolder_name)
+{
+    for (int i = 0; i < folder->nb_subfolders; i++)
+    {
+        Folder* current_subfolder = folder->subfolders[i];
+        if (stringsAreEqual(subfolder_name, current_subfolder->name))
+            return current_subfolder;
+    }
+
+    return NOT_FOUND;
+}
+
+// Find a file in a given folder, thanks to its name
+// If not found, returns NOT_FOUND (NULL alias)
+File* findFileInFolder (const Folder* folder, const char* file_name)
+{
+    for (int i = 0; i < folder->nb_files; i++)
+    {
+        File* current_file = folder->files[i];
+        if (stringsAreEqual(file_name, current_file->name))
+            return current_file;
+    }
+
+    return NOT_FOUND;
+}
+
+// Find a file from a full path in a file cache
+// If not found, returns NOT_FOUND (NULL alias)
+// If path is longer than MAX_PATH_LENGTH, returns NOT_FOUND
+// If path contains a folder or file name longer than MAX_NAME_LENGTH, returns NOT_FOUND
+File* findFileInCache (const FileCache* cache, char* path)
+{
+    char    next_folder_name[MAX_NAME_LENGTH];
+    Folder* current_folder = cache->root;
+
+    // Read the remaining path until either '/' or '\0' is found
+    // At most MAX_PATH_LENGTH characters can be read and tested
+    char* remaining_path = path;
+
+    for (;;)
+    {
+        char* next_remaining_path = strchr(remaining_path, '/');
+
+        // If no '/' was found, try to fetch the file in current folder
+        if (next_remaining_path == NULL)
+            return findFileInFolder(current_folder, remaining_path);
+
+        // Get the current name to use
+        int name_length = (next_remaining_path - remaining_path) / sizeof(char);
+        memcpy(next_folder_name, remaining_path, name_length);
+        next_folder_name[name_length] = '\0';
+
+        // Try to move into the right subfolder
+        current_folder = findSubfolderInFolder(current_folder, next_folder_name);
+        if (current_folder == NOT_FOUND)
+            return NOT_FOUND;
+
+        // Ignore all leading '/' in the remaining path
+        remaining_path = next_remaining_path;
+        while (remaining_path[0] == '/')
+            remaining_path++;
+    }
+}

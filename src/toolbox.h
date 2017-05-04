@@ -51,6 +51,7 @@ void printTitle (const char* format, ...);
 void printError (const char* format, ...);
 void printWarning (const char* format, ...);
 
+bool stringsAreEqual (const char* string_1, const char* string_2);
 char* extractDirectoryNameFromPath (const char* path);
 
 #endif

@@ -141,6 +141,11 @@ void printWarning (const char* format, ...)
 // STRING-RELATED FUNCTIONS
 // -----------------------------------------------------------------------------
 
+bool stringsAreEqual (const char* string_1, const char* string_2)
+{
+    return strcmp(string_1, string_2) == 0;
+}
+
 char* extractDirectoryNameFromPath (const char* path)
 {  
     // Find the last '/' character position
