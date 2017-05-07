@@ -86,7 +86,11 @@ OptionValue getOptionValueFromString (const Option opt[], char* str,
             compLen = strlen(str)+1;
         else
             compLen = posEnd - str + 1;
-        upperCase = malloc((compLen+1)*sizeof(char));
+
+        upperCase = malloc((compLen+1) * sizeof(char));
+        if (upperCase == NULL)
+                handleErrorAndExit("malloc() failed in getOptionValueFromString()");
+
         for (int i = 0; i < compLen; ++i)
             upperCase[i] = toupper(str[i]);
         upperCase[compLen] = '\0';
@@ -111,12 +115,12 @@ OptionValue getOptionValueFromString (const Option opt[], char* str,
 }
 
 // I swear i'll put the buffer back in its state after i've dealt with it
-int fillHeaderWith (HttpHeader* header, char* buffer)
+int fillHttpHeaderWith (HttpHeader* header, char* buffer)
 {
     char* pos = buffer;
-    
     char* end = strchr(pos, ' ');
     CHECK_SYNTAX
+
     header->method = getOptionValueFromString(methodSwitch, pos, true, end);
     
     pos = end + 1;
@@ -137,17 +141,26 @@ int fillHeaderWith (HttpHeader* header, char* buffer)
         if (queryPos == NULL)
         {
             int len = end-pos+1;
-            header->requestTarget = malloc(len*sizeof(char));
+            header->requestTarget = malloc(len * sizeof(char));
+            if (header->requestTarget == NULL)
+                handleErrorAndExit("malloc() failed in fillHttpHeaderWith()");
+
             strncpy(header->requestTarget, pos, len-1);
             header->requestTarget[len-1] = '\0';
         }
         else
         {
             int len = queryPos-pos+1;
-            header->requestTarget = malloc(len*sizeof(char));
+            header->requestTarget = malloc(len * sizeof(char));
+            if (header->requestTarget == NULL)
+                handleErrorAndExit("malloc() failed in fillHttpHeaderWith()");
+
             strncpy(header->requestTarget, pos, len-1);
             header->requestTarget[len-1] = '\0';
-            header->query = malloc((end-queryPos)*sizeof(char));
+            header->query = malloc((end-queryPos) * sizeof(char));
+            if (header->query == NULL)
+                handleErrorAndExit("malloc() failed in fillHttpHeaderWith()");
+
             strncpy(header->query, queryPos+1, (end-queryPos-1));
             header->query[end-queryPos-1] = '\0';
         }
@@ -158,7 +171,6 @@ int fillHeaderWith (HttpHeader* header, char* buffer)
     CHECK_SYNTAX
     
     header->version = getOptionValueFromString(versionSwitch, pos, true, end);
-    
     if (header->version != HTTP_V1_1)
     {
         switch (header->version)
@@ -193,23 +205,30 @@ int fillHeaderWith (HttpHeader* header, char* buffer)
         endValue++;
         // value = [fieldValue : endValue[
         int lenValue = (endValue - fieldValue);
+        
         HttpHeaderField headerField = getOptionValueFromString(headerSwitch, fieldName, true, endName+1);
         switch (headerField)
         {
             case HEAD_HOST:
                 if (header->host)
                     return 400;
-                header->host = malloc((lenValue+1)*sizeof(char));
+
+                header->host = malloc((lenValue+1) * sizeof(char));
+                if (header->host == NULL)
+                    handleErrorAndExit("malloc() failed in fillHttpHeaderWith()");
+
                 strncpy(header->host, fieldValue, lenValue);
                 header->host[lenValue] = '\0';
                 break;
+
             case HEAD_ACCEPT:
                 if (header->accept != NULL)
                 {
                     int lenInit = strlen(header->accept);
-                    char* new = realloc(header->accept, (lenInit+1+lenValue+1)*sizeof(char));
+                    char* new = realloc(header->accept, (lenInit+1+lenValue+1) * sizeof(char));
                     if (new == NULL)
-                        return 500;
+                        return 500; // ???
+
                     header->accept = new;
                     header->accept[lenInit] = ',';
                     header->accept[lenInit+1] = '\0';
@@ -217,6 +236,7 @@ int fillHeaderWith (HttpHeader* header, char* buffer)
                     header->accept[lenInit+1+lenValue] = '\0';
                 }
                 break;
+
             default:
                 break;
         }
