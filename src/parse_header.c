@@ -1,8 +1,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-
+#include <stdbool.h>
+#include "toolbox.h"
 #include "http.h"
+#include "parse_header.h"
+
+// -----------------------------------------------------------------------------
+// INTERNAL MACROS AND TYPES
+// -----------------------------------------------------------------------------
 
 #define ISOLATE(ptr, code) {\
     char ISOLATE_save = *ptr;\
@@ -10,29 +16,67 @@
     code;\
     *ptr = ISOLATE_save;\
 }
+
 // #define ISOLATE_CALL(ptr, code, returnValue) ISOLATE(ptr, returnValue = code)
+
 #define CHECK_SYNTAX {\
     if (end == NULL)\
         return 400;\
 }
 
+// -----------------------------------------------------------------------------
+
+// Generic type for enum's values (basically integers)
 typedef int OptionValue;
 
+// An option associates a HTTP header field's string value (key) with its internally-used value
 typedef struct Option
 {
     char* key;
     OptionValue value;
 } Option;
 
-typedef int bool;
-const bool true = 1;
-const bool false = 0;
+// List of handled header fields
+typedef enum HttpHeaderField {
+    HEAD_HOST,
+    HEAD_ACCEPT,
+
+    HEAD_UNKNOWN
+} HttpHeaderField;
+
+// Arrays of options
+// Each different types of handled field should have its own array
+// Note, though, than differnet field may share the same set of accepted values
+Option methodSwitch[] = {
+    { "GET",  HTTP_GET },
+    { "HEAD", HTTP_HEAD },
+    { "POST", HTTP_POST },
+    { NULL,   HTTP_UNKNOWN_METHOD }
+};
+
+Option versionSwitch[] = {
+    { "HTTP/1.0", HTTP_V1_0 },
+    { "HTTP/1.1", HTTP_V1_1 },
+    { "HTTP/2.0", HTTP_V2_0 },
+    { NULL,       HTTP_UNKNOWN_VERSION }
+};
+
+Option headerSwitch[] = {
+    { "HOST",   HEAD_HOST },
+    { "ACCEPT", HEAD_ACCEPT },
+    { NULL,     HEAD_UNKNOWN }
+};
+
+// -----------------------------------------------------------------------------
+// HEADER FILLING FROM REQUEST BUFFER
+// -----------------------------------------------------------------------------
 
 /**
  * In @opt, last Option is default, it has NULL for key.
  * If case_unsensitive is set to true, the @key entries of @opt should be UPPERCASE or won't be recognized.
  */
-OptionValue doSwitch(const Option opt[], char* str, bool case_unsensitive, char* posEnd)
+OptionValue getOptionValueFromString (const Option opt[], char* str,
+                                      bool case_unsensitive, char* posEnd)
 {
     if (case_unsensitive)
     {
@@ -47,16 +91,18 @@ OptionValue doSwitch(const Option opt[], char* str, bool case_unsensitive, char*
             upperCase[i] = toupper(str[i]);
         upperCase[compLen] = '\0';
 
-        OptionValue ret = doSwitch(opt, upperCase, false, NULL);
+        OptionValue ret = getOptionValueFromString(opt, upperCase, false, NULL);
         free(upperCase);
         return ret;
     }
+
     if (posEnd != NULL)
     {
         OptionValue ret;
-        ISOLATE(posEnd, ret = doSwitch(opt, str, false, NULL));
+        ISOLATE(posEnd, ret = getOptionValueFromString(opt, str, false, NULL));
         return ret;
     }
+
     int optActu = 0;
     for (; opt[optActu].key != NULL; optActu++)
         if (strcmp(opt[optActu].key, str) == 0)
@@ -64,42 +110,14 @@ OptionValue doSwitch(const Option opt[], char* str, bool case_unsensitive, char*
     return opt[optActu].value;
 }
 
-typedef enum HttpHeaderField {
-    HEAD_HOST,
-    HEAD_ACCEPT,
-
-    HEAD_UNKNOWN
-} HttpHeaderField;
-
-
-Option methodSwitch[] = {
-{ "GET", HTTP_GET },
-{ "HEAD", HTTP_HEAD },
-{ "POST", HTTP_POST },
-{ NULL, HTTP_UNKNOWN_METHOD }
-};
-
-Option versionSwitch[] = {
-{ "HTTP/1.0", HTTP_V1_0 },
-{ "HTTP/1.1", HTTP_V1_1 },
-{ "HTTP/2.0", HTTP_V2_0 },
-{ NULL, HTTP_UNKNOWN_VERSION }
-};
-
-Option headerSwitch[] = {
-{ "HOST", HEAD_HOST },
-{ "ACCEPT", HEAD_ACCEPT },
-{ NULL, HEAD_UNKNOWN }
-};
-
 // I swear i'll put the buffer back in its state after i've dealt with it
-int fillHeaderWith(HttpHeader* header, char* buffer)
+int fillHeaderWith (HttpHeader* header, char* buffer)
 {
     char* pos = buffer;
     
     char* end = strchr(pos, ' ');
     CHECK_SYNTAX
-    header->method = doSwitch(methodSwitch, pos, true, end);
+    header->method = getOptionValueFromString(methodSwitch, pos, true, end);
     
     pos = end + 1;
     end = strchr(pos, ' ');
@@ -139,7 +157,7 @@ int fillHeaderWith(HttpHeader* header, char* buffer)
     end = strchr(pos, '\n');
     CHECK_SYNTAX
     
-    header->version = doSwitch(versionSwitch, pos, true, end);
+    header->version = getOptionValueFromString(versionSwitch, pos, true, end);
     
     if (header->version != HTTP_V1_1)
     {
@@ -156,8 +174,8 @@ int fillHeaderWith(HttpHeader* header, char* buffer)
     }
 
     pos = end+1;
-    // NOW we should be at the start of the header fields.
 
+    // NOW we should be at the start of the header fields.
     while (*pos != '\n')
     {
         char* fieldName = pos;
@@ -175,7 +193,7 @@ int fillHeaderWith(HttpHeader* header, char* buffer)
         endValue++;
         // value = [fieldValue : endValue[
         int lenValue = (endValue - fieldValue);
-        HttpHeaderField headerField = doSwitch(headerSwitch, fieldName, true, endName+1);
+        HttpHeaderField headerField = getOptionValueFromString(headerSwitch, fieldName, true, endName+1);
         switch (headerField)
         {
             case HEAD_HOST:
@@ -206,10 +224,3 @@ int fillHeaderWith(HttpHeader* header, char* buffer)
 
     return 200;
 }
-
-
-
-
-
-
-

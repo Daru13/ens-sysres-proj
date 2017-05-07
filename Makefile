@@ -18,6 +18,9 @@ build/main.o: src/main.c src/main.h build/server.o build/file_cache.o build/pars
 build/server.o: src/server.c src/server.h build/toolbox.o
 	$(CC) $(CCFLAGS) -c src/server.c -o build/server.o
 
+build/parse_header.o: src/parse_header.c src/parse_header.h build/toolbox.o
+	$(CC) $(CCFLAGS) -c src/parse_header.c -o build/parse_header.o
+
 build/http.o: src/http.c src/http.h
 	$(CC) $(CCFLAGS) -c src/http.c -o build/http.o	
 
@@ -26,9 +29,6 @@ build/file_cache.o: src/file_cache.c src/file_cache.h build/toolbox.o
 
 build/toolbox.o: src/toolbox.c src/toolbox.h
 	$(CC) $(CCFLAGS) -c src/toolbox.c -o build/toolbox.o
-
-build/parse_header.o: src/parse_header.c src/parse_header.h
-	$(CC) $(CCFLAGS) -c src/parse_header.c -o build/parse_header.o
 
 # Cleaning rule
 clean:
