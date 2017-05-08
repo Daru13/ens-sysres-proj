@@ -11,7 +11,7 @@
 typedef enum ClientState {
     STATE_WAITING_FOR_REQUEST,
     STATE_PROCESSING_REQUEST,
-    STATE_PRODUCING_ANWSER,
+    /*STATE_PRODUCING_ANWSER,*/
     STATE_ANSWERING
 } ClientState;
 
@@ -19,25 +19,19 @@ typedef struct Client {
     int                fd;
     struct sockaddr_in address;
 
-    // TODO: change/remove?
-    // int slot_index; // Position in the server's client array
-
-    // TODO: use poll()
-    // struct pollfd poll_slot
-    
     // Clients form a doubly-linked list
     struct Client* previous;
     struct Client* next;
     
     ClientState state;
 
-    char*       read_buffer;
-    int         read_buffer_message_length;
-    int         read_buffer_message_offset;
+    char* read_buffer;
+    int   read_buffer_message_length;
+    int   read_buffer_message_offset;
 
-    char*       write_buffer;
-    int         write_buffer_message_length;
-    int         write_buffer_message_offset;
+    char* write_buffer;
+    int   write_buffer_message_length;
+    int   write_buffer_message_offset;
 } Client;
 
 // Structures used to represent a server
@@ -59,7 +53,7 @@ typedef struct Server {
     int                nb_clients;
     int                max_fd;
 
-    ServParameters  parameters;
+    ServParameters*  parameters;
 } Server;
 
 // -----------------------------------------------------------------------------
@@ -69,8 +63,8 @@ typedef struct Server {
 
 #define SERV_DEFAULT_QUEUE_MAX_LENGTH 5
 #define SERV_DEFAULT_MAX_NB_CLIENTS   64 
-#define SERV_DEFAULT_READ_BUF_SIZE    512 // bytes
-#define SERV_DEFAULT_WRITE_BUF_SIZE   512 // bytes
+#define SERV_DEFAULT_READ_BUF_SIZE    16384 // bytes
+#define SERV_DEFAULT_WRITE_BUF_SIZE   32768 // bytes
 
 #define SERV_DEFAULT_ROOT_DATA_DIR    "./www"
 
@@ -92,14 +86,14 @@ int acceptWebSocket (const int sockfd, struct sockaddr_in* address);
 Client* createClient ();
 void deleteClient (Client* client);
 void initClient (Client* client, const int fd, const struct sockaddr_in address,
-                 const ServParameters parameters);
+                 const ServParameters* parameters);
 char* getClientStateAsText (const ClientState state);
 void printClient (const Client* client);
 
 Server* createServer ();
 void deleteServer (Server* server);
 void initServer (Server* server, const int sockfd, const struct sockaddr_in address,
-                 const ServParameters parameters);
+                 ServParameters* parameters);
 void defaultInitServer (Server* server);
 bool serverIsStarted (const Server* server);
 void printServer (const Server* server);

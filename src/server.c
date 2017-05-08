@@ -99,7 +99,7 @@ void deleteClient (Client* client)
 }
 
 void initClient (Client* client, const int fd, const struct sockaddr_in address,
-                 const ServParameters parameters)
+                 const ServParameters* parameters)
 {
     client->fd      = fd;
     client->address = address;
@@ -110,13 +110,13 @@ void initClient (Client* client, const int fd, const struct sockaddr_in address,
 
     client->read_buffer_message_length = 0;
     client->read_buffer_message_offset = 0;
-    client->read_buffer                = malloc(parameters.read_buffer_size * sizeof(char));
+    client->read_buffer                = malloc(parameters->read_buffer_size * sizeof(char));
     if (client->read_buffer == NULL)
         handleErrorAndExit("malloc() failed in initClient()");
 
     client->write_buffer_message_length = 0;
     client->write_buffer_message_offset = 0;
-    client->write_buffer                = malloc(parameters.write_buffer_size * sizeof(char));
+    client->write_buffer                = malloc(parameters->write_buffer_size * sizeof(char));
     if (client->write_buffer == NULL)
         handleErrorAndExit("malloc() failed in initClient()");
 }
@@ -127,7 +127,10 @@ char* getClientStateAsText (const ClientState state)
     {
         case STATE_WAITING_FOR_REQUEST:
             return "WAITING_FOR_REQUEST";
-
+        case STATE_PROCESSING_REQUEST:
+            return "PROCESSING_REQUEST";
+/*        case STATE_PRODUCING_ANSWER:
+            return "PRODUCING_ANSWER";*/
         case STATE_ANSWERING:
             return "ANSWERING";
 
@@ -138,11 +141,11 @@ char* getClientStateAsText (const ClientState state)
 
 void printClient (const Client* client)
 {
-    // To complete?
     printSubtitle("Client (fd: %d)", client->fd);
-    //printf("| slot_index: %d\n", client->slot_index);
-    printf("| state: %s\n", getClientStateAsText(client->state));
-    printf("| read_buffer: ofs = %d, length = %d\n",
+
+    // Basic information on client
+    printf("| state       : %s\n", getClientStateAsText(client->state));
+    printf("| read_buffer : ofs = %d, length = %d\n",
         client->read_buffer_message_length, client->read_buffer_message_offset);
     printf("| write_buffer: ofs = %d, length = %d\n",
         client->write_buffer_message_length, client->write_buffer_message_offset);
@@ -167,7 +170,7 @@ void deleteServer (Server* server)
 }
 
 void initServer (Server* server, const int sockfd, const struct sockaddr_in address,
-                 const ServParameters parameters)
+                 ServParameters* parameters)
 {
     server->sockfd     = sockfd;
     server->address    = address;
@@ -189,12 +192,15 @@ void defaultInitServer (Server* server)
     int                sockfd  = createWebSocket();
     struct sockaddr_in address = getLocalAddress(SERV_DEFAULT_PORT);
 
-    ServParameters parameters;
-    parameters.queue_max_length    = SERV_DEFAULT_QUEUE_MAX_LENGTH;
-    parameters.max_nb_clients      = SERV_DEFAULT_MAX_NB_CLIENTS;
-    parameters.read_buffer_size    = SERV_DEFAULT_READ_BUF_SIZE;
-    parameters.write_buffer_size   = SERV_DEFAULT_WRITE_BUF_SIZE;
-    parameters.root_data_directory = SERV_DEFAULT_ROOT_DATA_DIR;
+    ServParameters* parameters = malloc(sizeof(ServParameters));
+    if (parameters == NULL)
+        handleErrorAndExit("malloc() failed in defaultInitServer()");
+
+    parameters->queue_max_length    = SERV_DEFAULT_QUEUE_MAX_LENGTH;
+    parameters->max_nb_clients      = SERV_DEFAULT_MAX_NB_CLIENTS;
+    parameters->read_buffer_size    = SERV_DEFAULT_READ_BUF_SIZE;
+    parameters->write_buffer_size   = SERV_DEFAULT_WRITE_BUF_SIZE;
+    parameters->root_data_directory = SERV_DEFAULT_ROOT_DATA_DIR;
 
     initServer(server, sockfd, address, parameters);
 }
@@ -206,11 +212,11 @@ bool serverIsStarted (const Server* server)
 
 void printServer (const Server* server)
 {
-    printSubtitle("\n====== SERVER ======");
-    printf("sockfd: %d\n", server->sockfd);
+    printTitle("SERVER");
+    printf("sockfd    : %d\n", server->sockfd);
     printf("is started: %s\n", server->is_started ? "true" : "false");
     printf("nb_clients: %d\n", server->nb_clients);
-    printf("max_fd: %d\n", server->max_fd);
+    printf("max_fd    : %d\n", server->max_fd);
     printf("\n");
 
     Client* current_client = server->clients;
@@ -226,7 +232,7 @@ void printServer (const Server* server)
 }
 
 // -----------------------------------------------------------------------------
-// MAIN FUNCTIONS: INIT, WAITING, CONNECTING, LOOPING AND READING
+// BASIC SERVER AND CLIENT-HANDLING FUNCTIONS
 // -----------------------------------------------------------------------------
 
 // Once a server is created and initialized, this must be called in order
@@ -238,7 +244,7 @@ void startServer (Server* server)
 
     // Attach the local adress to the socket, and make it a listener
     bindWebSocket(server->sockfd, &server->address);
-    listenWebSocket(server->sockfd, server->parameters.queue_max_length);
+    listenWebSocket(server->sockfd, server->parameters->queue_max_length);
 
     // Once started, update the internal state of the server
     server->is_started = true;
@@ -307,12 +313,12 @@ void removeClientFromServer (Server* server, Client* client)
 // If the server has no more free client slot, fails, print an error, and return NULL
 Client* acceptNewClient (Server* server)
 {
-    ServParameters parameters = server->parameters;
+    ServParameters* parameters = server->parameters;
 
     if (! serverIsStarted(server))
         handleErrorAndExit("acceptNewClient() failed: server is not started");
 
-    if (server->nb_clients == parameters.max_nb_clients)
+    if (server->nb_clients == parameters->max_nb_clients)
     {
         printError("Warning: acceptNewClient() failed: no more free slot!\n");
         return NULL;
@@ -329,14 +335,18 @@ Client* acceptNewClient (Server* server)
     return new_client;
 }
 
+// -----------------------------------------------------------------------------
+// READING FROM AND WRITING TO CLIENTS
+// -----------------------------------------------------------------------------
+
 // TODO: Temporary; must be improved
 void readFromClient (Server* server, Client* client)
 {
     // Read data from the socket
     printf("Reading up to %d bytes from client %d...\n",
-           server->parameters.read_buffer_size - 1, client->fd);
+           server->parameters->read_buffer_size - 1, client->fd);
     int nb_bytes_read = read(client->fd, client->read_buffer,
-                             server->parameters.read_buffer_size - 1);
+                             server->parameters->read_buffer_size - 1);
     client->read_buffer[nb_bytes_read] = '\0';
 
     printf("***** Buffer content below (%d bytes) *****\n", nb_bytes_read);
@@ -370,7 +380,7 @@ void writeToClient (Server* server, Client* client)
     printf("Writing up to %lu bytes to client %d...\n",
            strlen(client->write_buffer), client->fd);
     int nb_bytes_write = write(client->fd, client->write_buffer,
-                               server->parameters.write_buffer_size - 1);
+                               server->parameters->write_buffer_size - 1);
     client->write_buffer[nb_bytes_write] = '\0';
 
     printf("***** Buffer content below (%d bytes) *****\n", nb_bytes_write);
@@ -381,6 +391,10 @@ void writeToClient (Server* server, Client* client)
     if (client->write_buffer_message_offset >= client->write_buffer_message_length)
         client->state = STATE_WAITING_FOR_REQUEST;  
 }
+
+// -----------------------------------------------------------------------------
+// MAIN SERVER LOOP : WAITING FOR CLIENTS AND REQUESTS, AND ANSWERING THEM
+// -----------------------------------------------------------------------------
 
 /* TODO: READ AND WRITE DELEGATE TO PROCESSES/THREADS/ETC?
  *
