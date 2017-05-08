@@ -9,6 +9,7 @@
 #include <poll.h>
 #include <netinet/in.h>
 #include "toolbox.h"
+#include "http.h"
 #include "server.h"
 
 // -----------------------------------------------------------------------------
@@ -104,24 +105,25 @@ void initClient (Client* client, const int fd, const struct sockaddr_in address,
     client->fd      = fd;
     client->address = address;
 
-    // client->slot_index = NO_ASSIGNED_SLOT;
     client->previous = NULL;
     client->next     = NULL;
 
-    client->read_buffer_message_length = 0;
-    client->read_buffer_message_offset = 0;
-    client->read_buffer                = malloc(parameters->read_buffer_size * sizeof(char));
-    if (client->read_buffer == NULL)
+    client->request_buffer_length = 0;
+    client->request_buffer_offset = 0;
+
+    client->request_buffer = malloc(parameters->read_buffer_size * sizeof(char));
+    if (client->request_buffer == NULL)
         handleErrorAndExit("malloc() failed in initClient()");
 
-    client->write_buffer_message_length = 0;
-    client->write_buffer_message_offset = 0;
-    client->write_buffer                = malloc(parameters->write_buffer_size * sizeof(char));
-    if (client->write_buffer == NULL)
+    client->answer_header_buffer_length = 0;
+    client->answer_header_buffer_offset = 0;
+
+    client->answer_header_buffer = malloc(parameters->write_buffer_size * sizeof(char));
+    if (client->answer_header_buffer == NULL)
         handleErrorAndExit("malloc() failed in initClient()");
 }
 
-char* getClientStateAsText (const ClientState state)
+char* getClientStateAsString (const ClientState state)
 {
     switch (state)
     {
@@ -144,11 +146,11 @@ void printClient (const Client* client)
     printSubtitle("Client (fd: %d)", client->fd);
 
     // Basic information on client
-    printf("| state       : %s\n", getClientStateAsText(client->state));
-    printf("| read_buffer : ofs = %d, length = %d\n",
-        client->read_buffer_message_length, client->read_buffer_message_offset);
-    printf("| write_buffer: ofs = %d, length = %d\n",
-        client->write_buffer_message_length, client->write_buffer_message_offset);
+    printf("| state       : %s\n", getClientStateAsString(client->state));
+    printf("| request_buffer : ofs = %d, length = %d\n",
+        client->request_buffer_length, client->request_buffer_offset);
+    printf("| answer_header_buffer: ofs = %d, length = %d\n",
+        client->answer_header_buffer_length, client->answer_header_buffer_offset);
 }
 
 // -----------------------------------------------------------------------------
@@ -342,24 +344,19 @@ Client* acceptNewClient (Server* server)
 // TODO: Temporary; must be improved
 void readFromClient (Server* server, Client* client)
 {
-    // Read data from the socket
+    // Read data from the socket, and null-terminate the buffer
     printf("Reading up to %d bytes from client %d...\n",
            server->parameters->read_buffer_size - 1, client->fd);
-    int nb_bytes_read = read(client->fd, client->read_buffer,
+    int nb_bytes_read = read(client->fd, client->request_buffer,
                              server->parameters->read_buffer_size - 1);
-    client->read_buffer[nb_bytes_read] = '\0';
+    client->request_buffer[nb_bytes_read] = '\0';
 
+    // Debug printing
     printf("***** Buffer content below (%d bytes) *****\n", nb_bytes_read);
-    printf("%s\n", client->read_buffer);
-/*
-    for (int i = 0; i < nb_bytes_read; i++)
-        printf("char %i is %d\n", i, client->read_buffer[i]);
+    printf("%s\n", client->request_buffer);
 
-    printf("strlen buffer: %lu\n", strlen(client->read_buffer));
-*/
-    // TODO: REMOVE THIS TEST :D!
-    if (! strcmp(client->read_buffer, "write\r\n"))
-        client->state = STATE_ANSWERING;
+    // Analyze the data which has been read from the client
+    parseHttpRequest(client->http_request, client->request_buffer);
 
     // If the read() call returned 0 (no byte has been read), it means the
     // client has ended the connection.
@@ -371,11 +368,7 @@ void readFromClient (Server* server, Client* client)
 // TODO: Temporary; must be improved
 void writeToClient (Server* server, Client* client)
 {
-    // TODO: REMOVE THIS TEST
-    char* test_msg = "YOU LOST, CLIENT!\n";
-    sprintf(client->write_buffer, test_msg, sizeof test_msg);
-    client->write_buffer_message_length = sizeof test_msg;
-
+/*
     // Write the data on the socket
     printf("Writing up to %lu bytes to client %d...\n",
            strlen(client->write_buffer), client->fd);
@@ -383,6 +376,7 @@ void writeToClient (Server* server, Client* client)
                                server->parameters->write_buffer_size - 1);
     client->write_buffer[nb_bytes_write] = '\0';
 
+    // Debug printing
     printf("***** Buffer content below (%d bytes) *****\n", nb_bytes_write);
     printf("%s\n", client->write_buffer);
 
@@ -390,6 +384,7 @@ void writeToClient (Server* server, Client* client)
     client->write_buffer_message_offset += nb_bytes_write;
     if (client->write_buffer_message_offset >= client->write_buffer_message_length)
         client->state = STATE_WAITING_FOR_REQUEST;  
+*/
 }
 
 // -----------------------------------------------------------------------------

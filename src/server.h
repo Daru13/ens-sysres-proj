@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/time.h>
 #include <poll.h>
+#include "http.h"
 
 // Structure represeting a client (server-side)
 typedef enum ClientState {
@@ -25,13 +26,22 @@ typedef struct Client {
     
     ClientState state;
 
-    char* read_buffer;
-    int   read_buffer_message_length;
-    int   read_buffer_message_offset;
+    // Buffer to read data
+    char* request_buffer;
+    int   request_buffer_length;
+    int   request_buffer_offset;
 
-    char* write_buffer;
-    int   write_buffer_message_length;
-    int   write_buffer_message_offset;
+    // Related HTTP request
+    HttpMessage* http_request;
+
+    // Buffer to write header data to send
+    char* answer_header_buffer;
+    int   answer_header_buffer_length;
+    int   answer_header_buffer_offset;
+
+    // Related HTTP answer 
+    // Note: it contained pointer to the body data to send
+    HttpMessage* http_answer;
 } Client;
 
 // Structures used to represent a server
@@ -70,7 +80,6 @@ typedef struct Server {
 
 // Named, useful constants
 #define FD_NO_CLIENT     -1
-#define NO_ASSIGNED_SLOT -1
 #define POLL_NO_TIMEOUT  -1
 #define POLL_NO_POLLING  -1
 
@@ -87,7 +96,7 @@ Client* createClient ();
 void deleteClient (Client* client);
 void initClient (Client* client, const int fd, const struct sockaddr_in address,
                  const ServParameters* parameters);
-char* getClientStateAsText (const ClientState state);
+char* getClientStateAsString (const ClientState state);
 void printClient (const Client* client);
 
 Server* createServer ();

@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "http.h"
 #include "toolbox.h"
+#include "parse_header.h"
+#include "http.h"
 
 // -----------------------------------------------------------------------------
 // HTTP MESSAGES CREATION, DELETION, INITIALIZATION
@@ -56,13 +57,13 @@ HttpContent* createHttpContent ()
 
 void deleteHttpContent (HttpContent* content)
 {
-    // TODO: free the body buffer?
     free(content);
 }
 
 void initEmptyHttpContent (HttpContent* content)
 {
     content->length = 0;
+    content->offset = 0;
     content->body   = NULL;
 }
 
@@ -99,3 +100,21 @@ void initAnswerHttpMessage (HttpMessage* message,
     initAnswerHttpHeader(message->header, version, code);
     initEmptyHttpContent(message->content);
 }
+
+// -----------------------------------------------------------------------------
+// HTTP REQUEST PARSING
+// -----------------------------------------------------------------------------
+
+// TODO: do this in another thread?
+// Parse a HTTP request from a buffer, and set the various fields of the given HttpMessage
+void parseHttpRequest (HttpMessage* request, char* buffer)
+{
+    int http_code /*?*/ = fillHttpHeaderWith(request->header, buffer);
+    // TODO: what about the body?
+}
+
+// -----------------------------------------------------------------------------
+// HTTP ANSWER PRODUCING
+// -----------------------------------------------------------------------------
+
+// TODO

@@ -67,6 +67,7 @@ typedef struct HttpHeader {
 // Structure representing a chunk of (text) data
 typedef struct HttpContent {
     int   length;
+    int   offset;
     char* body;
 } HttpContent;
 
@@ -93,5 +94,7 @@ void deleteHttpMessage (HttpMessage* message);
 void initRequestHttpMessage (HttpMessage* message);
 void initAnswerHttpMessage (HttpMessage* message,
                             const HttpVersion version, const HttpCode code);
+
+void parseHttpRequest (HttpMessage* request, char* buffer);
 
 #endif
