@@ -30,7 +30,14 @@ void initRequestHttpHeader (HttpHeader* header)
     header->method  = HTTP_UNKNOWN_METHOD;
     header->code    = HTTP_NO_CODE;
     
-    header->requestType = HTTP_NO_REQUEST_TYPE;
+    header->requestType   = HTTP_NO_REQUEST_TYPE;
+    
+    header->requestTarget  = NULL;
+    header->query          = NULL;
+    header->host           = NULL;
+    header->accept         = NULL;
+    header->content_length = 0;
+    header->content_type   = NULL;
 }
 
 // Made for headers of outgoing messages (i.e. built by the server to answer requests)
@@ -42,6 +49,13 @@ void initAnswerHttpHeader (HttpHeader* header,
     header->code    = code;
 
     header->requestType = HTTP_NO_REQUEST_TYPE;
+    
+    header->requestTarget  = NULL;
+    header->query          = NULL;
+    header->host           = NULL;
+    header->accept         = NULL;
+    header->content_length = 0;
+    header->content_type   = NULL;
 }
 
 // -----------------------------------------------------------------------------
@@ -74,6 +88,10 @@ HttpMessage* createHttpMessage ()
     HttpMessage* new_message = malloc(sizeof(HttpMessage));
     if (new_message == NULL)
         handleErrorAndExit("malloc() failed in createHttpMessage()");
+
+    // Also instanciate header and content structures
+    new_message->header  = createHttpHeader();
+    new_message->content = createHttpContent();
 
     return new_message;
 }

@@ -474,15 +474,20 @@ File* findFileInCache (const FileCache* cache, char* path)
     // At most MAX_PATH_LENGTH characters can be read and tested
     char* remaining_path = path;
 
+    // Start by ignoring all leading '/'
+        while (remaining_path[0] == '/')
+            remaining_path++;
+
     for (;;)
     {
         char* next_remaining_path = strchr(remaining_path, '/');
 
         // If no '/' was found, try to fetch the file in current folder
         if (next_remaining_path == NULL)
-            return findFileInFolder(current_folder, remaining_path);
+            return findFileInFolder(current_folder, remaining_path /* i.e. file name */);
 
-        // Get the current name to use
+        // Otherwise, get the current name to use
+        // (it ranges from the first character to the last one before '/')
         int name_length = (next_remaining_path - remaining_path) / sizeof(char);
         memcpy(next_folder_name, remaining_path, name_length);
         next_folder_name[name_length] = '\0';

@@ -14,16 +14,15 @@ int main (const int argc, const char* argv[])
 
     Server* server = createServer();
     defaultInitServer(server);
-/*
-    startServer(server);
-    handleClientRequests(server);
-*/
-    // deleteServer(server);
 
     FileCache* cache = buildCacheFromDisk(server->parameters->root_data_directory,
                                           32 * 1000000);
     printFileCache(cache);
+    server->cache = cache;
 
+    startServer(server);
+    handleClientRequests(server);
+/*
     File*  f  = findFileInCache(cache, "a");
     File * f2 = findFileInCache(cache, "abcde/xyz");
     File * f3 = findFileInCache(cache, "subdir/fff");
@@ -31,8 +30,9 @@ int main (const int argc, const char* argv[])
     printf("f = %p, f2 = %p, f3 = %p\n", (void*) f, (void*) f2, (void*) f3);
     printFile(f,  0);
     printFile(f3, 0);
-  
+*/
     // deleteFileCache(cache);
+    // deleteServer(server);
 
     return 0;
 }

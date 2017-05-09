@@ -10,6 +10,7 @@
 #include <netinet/in.h>
 #include "toolbox.h"
 #include "http.h"
+#include "file_cache.h"
 #include "server.h"
 
 // -----------------------------------------------------------------------------
@@ -96,6 +97,12 @@ Client* createClient ()
 
 void deleteClient (Client* client)
 {
+    free(client->request_buffer);
+    deleteHttpMessage(client->http_request);
+
+    free(client->answer_header_buffer);
+    deleteHttpMessage(client->http_answer);
+
     free(client);
 }
 
@@ -115,12 +122,19 @@ void initClient (Client* client, const int fd, const struct sockaddr_in address,
     if (client->request_buffer == NULL)
         handleErrorAndExit("malloc() failed in initClient()");
 
+    client->http_request = createHttpMessage();
+    initRequestHttpMessage(client->http_request);
+    // TODO: is init required?
+
     client->answer_header_buffer_length = 0;
     client->answer_header_buffer_offset = 0;
 
     client->answer_header_buffer = malloc(parameters->write_buffer_size * sizeof(char));
     if (client->answer_header_buffer == NULL)
         handleErrorAndExit("malloc() failed in initClient()");
+
+    client->http_answer = createHttpMessage();
+    // TODO: initialize?
 }
 
 char* getClientStateAsString (const ClientState state)
@@ -146,11 +160,15 @@ void printClient (const Client* client)
     printSubtitle("Client (fd: %d)", client->fd);
 
     // Basic information on client
-    printf("| state       : %s\n", getClientStateAsString(client->state));
-    printf("| request_buffer : ofs = %d, length = %d\n",
+    printf("| state        : %s\n", getClientStateAsString(client->state));
+    printf("| request      : ofs = %d, length = %d\n",
         client->request_buffer_length, client->request_buffer_offset);
-    printf("| answer_header_buffer: ofs = %d, length = %d\n",
+    printf("| answer header: ofs = %d, length = %d\n",
         client->answer_header_buffer_length, client->answer_header_buffer_offset);
+    printf("| answer body  : ofs = %d, length = %d\n",
+        client->http_answer->content->offset, client->http_answer->content->length);
+    printf("| requestTarget: %s\n", client->http_request->header->requestTarget != NULL ?
+                                    client->http_request->header->requestTarget : "");
 }
 
 // -----------------------------------------------------------------------------
@@ -168,6 +186,22 @@ Server* createServer ()
 
 void deleteServer (Server* server)
 {
+    // Delete all the clients
+    Client* current_client = server->clients;
+    while (current_client != NULL)
+    {
+        Client* next_client = current_client->next;
+        deleteClient(current_client);
+        current_client = next_client;
+    }
+
+    // Delete the parameters structure
+    free(server->parameters);
+
+    // Delete the file cache
+    deleteFileCache(server->cache);
+
+    // FInallu delete the main structure
     free(server);
 }
 
@@ -183,6 +217,9 @@ void initServer (Server* server, const int sockfd, const struct sockaddr_in addr
 
     // ...and it has no client yet
     server->clients = NULL;
+
+    // ...nor it has any cached file
+    server->cache = NULL;
 
     server->nb_clients = 0;
     server->max_fd     = sockfd;
@@ -214,7 +251,7 @@ bool serverIsStarted (const Server* server)
 
 void printServer (const Server* server)
 {
-    printTitle("SERVER");
+    printSubtitle("[Server]");
     printf("sockfd    : %d\n", server->sockfd);
     printf("is started: %s\n", server->is_started ? "true" : "false");
     printf("nb_clients: %d\n", server->nb_clients);
@@ -229,8 +266,6 @@ void printServer (const Server* server)
     }
        
     printf("\n");
-
-    // Print parameters as well?
 }
 
 // -----------------------------------------------------------------------------
@@ -251,8 +286,6 @@ void startServer (Server* server)
     // Once started, update the internal state of the server
     server->is_started = true;
 }
-
-// TODO: handle a proper client addition/removal, to avoid waisted space/long searches!
 
 void addClientToServer (Server* server, Client* client)
 {
@@ -341,7 +374,6 @@ Client* acceptNewClient (Server* server)
 // READING FROM AND WRITING TO CLIENTS
 // -----------------------------------------------------------------------------
 
-// TODO: Temporary; must be improved
 void readFromClient (Server* server, Client* client)
 {
     // Read data from the socket, and null-terminate the buffer
@@ -355,36 +387,143 @@ void readFromClient (Server* server, Client* client)
     printf("***** Buffer content below (%d bytes) *****\n", nb_bytes_read);
     printf("%s\n", client->request_buffer);
 
-    // Analyze the data which has been read from the client
-    parseHttpRequest(client->http_request, client->request_buffer);
-
     // If the read() call returned 0 (no byte has been read), it means the
     // client has ended the connection.
     // Thus, it can be removed from the list of clients
     if (nb_bytes_read == 0)
+    {
         removeClientFromServer(server, client);
+        return;
+    }
+
+    // Otherwise, analyze the data which has been read from the client
+    processClientRequest(server, client);
 }
 
-// TODO: Temporary; must be improved
-void writeToClient (Server* server, Client* client)
+// TODO: CLEAN THIS!
+void processClientRequest (Server* server, Client* client)
 {
-/*
-    // Write the data on the socket
-    printf("Writing up to %lu bytes to client %d...\n",
-           strlen(client->write_buffer), client->fd);
-    int nb_bytes_write = write(client->fd, client->write_buffer,
-                               server->parameters->write_buffer_size - 1);
-    client->write_buffer[nb_bytes_write] = '\0';
+    client->state = STATE_PROCESSING_REQUEST;
+
+    // TODO: start by checking whether the request is complete or not?
+    parseHttpRequest(client->http_request, client->request_buffer);
+
+    // TODO: REMOVE DEBUG //////////////////////////////////////////////////////
+    static char dummy[256];
+    File* fetched_file = findFileInCache(server->cache,
+                                         client->http_request->header->requestTarget);
+    if (fetched_file != NOT_FOUND)
+    {
+        printf("\n\nFILE '%s' has been found!\n\n", client->http_request->header->requestTarget);
+        initAnswerHttpMessage(client->http_answer, HTTP_V1_1, HTTP_200);
+
+        client->http_answer->content->body   = fetched_file->content;
+        client->http_answer->content->length = fetched_file->size;
+        client->http_answer->content->offset = 0;
+
+        client->http_answer->header->content_type   = fetched_file->type;
+        client->http_answer->header->content_length = fetched_file->size;
+
+        sprintf(dummy, "HTTP/1.1 200\r\nContent-Length: %d\r\nContent-Type: %s\r\n\r\n",
+            client->http_answer->header->content_length,
+            client->http_answer->header->content_type);
+    }
+    else
+    {   
+        printf("\n\nFILE '%s' NOT FOUND!\n\n", client->http_request->header->requestTarget);
+        initAnswerHttpMessage(client->http_answer, HTTP_V1_1, HTTP_404);
+
+        client->http_answer->content->body   = NULL;
+        client->http_answer->content->length = 0;
+        client->http_answer->content->offset = 0;
+
+        client->http_answer->header->content_type   = "";
+        client->http_answer->header->content_length = 0;
+
+        sprintf(dummy, "HTTP/1.1 404 File not found!\r\n\r\n");
+    }
+
+    client->answer_header_buffer        = strcpy(client->answer_header_buffer, dummy);
+    client->answer_header_buffer_length = strlen(dummy);
+    client->answer_header_buffer_offset = 0;
+
+    client->state = STATE_ANSWERING;
+    ////////////////////////////////////////////////////////////////////////////
+}
+
+// Only write the HTTP header buffer on the socket
+// Returns true if the buffer has been entirely written, false otherwise
+bool writeHttpHeaderToClient (Server* server, Client* client)
+{
+    // Write the header data on the socket
+    printf("(HEAD) Writing up to %lu bytes to client %d...\n",
+           strlen(client->answer_header_buffer), client->fd);
+
+    int remaining_bytes_to_write = client->answer_header_buffer_length
+                                 - client->answer_header_buffer_offset;
+    int nb_bytes_write = write(client->fd, client->answer_header_buffer,
+                               remaining_bytes_to_write);
 
     // Debug printing
-    printf("***** Buffer content below (%d bytes) *****\n", nb_bytes_write);
-    printf("%s\n", client->write_buffer);
+    printSubtitle("***** (HEAD) Buffer content below (%d bytes) *****\n", nb_bytes_write);
+    printf("%.*s\n", nb_bytes_write, client->answer_header_buffer);
 
-    // Update the client state
-    client->write_buffer_message_offset += nb_bytes_write;
-    if (client->write_buffer_message_offset >= client->write_buffer_message_length)
-        client->state = STATE_WAITING_FOR_REQUEST;  
-*/
+    // Update the header buffer offset
+    client->answer_header_buffer_offset += nb_bytes_write;
+
+    return client->answer_header_buffer_offset
+        == client->answer_header_buffer_length;
+}
+
+// Only write the HTTP header buffer on the socket
+// Returns true if the buffer has been entirely written, false otherwise
+bool writeHttpContentToClient (Server* server, Client* client)
+{
+    HttpContent* answer_content = client->http_answer->content;
+
+    // There is no body to write if its content is NULL
+    // In such a case, we assume the body has been written (by returning true)
+    if (answer_content->body == NULL)
+    {
+        printf("\nNO BODY WAS FOUND: NO CONTENT TO SEND...\n\n");
+        return true;
+    }
+    
+    // Write the body data on the socket
+    int remaining_bytes_to_write = answer_content->length - answer_content->offset;
+    printf("(BODY) Writing up to %d bytes to client %d...\n",
+           remaining_bytes_to_write, client->fd);
+
+    int nb_bytes_write = write(client->fd, answer_content->body,
+                               remaining_bytes_to_write);
+
+    // Debug printing
+    printSubtitle("***** (BODY) Buffer content below (%d bytes) *****\n", nb_bytes_write);
+    printf("%.*s\n", nb_bytes_write, answer_content->body);
+
+    // Update the message body offset
+    answer_content->offset += nb_bytes_write;
+
+    return answer_content->offset == answer_content->length;
+}
+
+void writeToClient (Server* server, Client* client)
+{
+    // In a first time, send the HTTP header data
+    bool header_is_sent = writeHttpHeaderToClient(server, client);
+
+    // In a second time, if the header has been sent, send the HTTP body data
+    bool body_is_sent = false;
+    if (header_is_sent)
+    {
+        printf("\nNOW SENDING BODY DATA :)!\n\n");
+        body_is_sent = writeHttpContentToClient(server, client);    
+    }
+
+    // If the whole HTTP answer has been sent (header + body),
+    // the server is done answering the client, and waits for new requets from it
+    if (header_is_sent && body_is_sent)
+        client->state = STATE_WAITING_FOR_REQUEST;
 }
 
 // -----------------------------------------------------------------------------

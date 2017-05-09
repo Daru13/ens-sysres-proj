@@ -63,7 +63,9 @@ typedef struct Server {
     int                nb_clients;
     int                max_fd;
 
-    ServParameters*  parameters;
+    FileCache* cache;
+
+    ServParameters* parameters;
 } Server;
 
 // -----------------------------------------------------------------------------
@@ -111,8 +113,11 @@ void startServer (Server* server);
 void addClientToServer (Server* server, Client* client);
 void removeClientFromServer (Server* server, Client* client);
 Client* acceptNewClient (Server* server);
+
 void readFromClient (Server* server, Client* client);
+void processClientRequest (Server* server, Client* client);
 void writeToClient (Server* server, Client* client);
+
 void handleClientRequests (Server* server);
 
 #endif
