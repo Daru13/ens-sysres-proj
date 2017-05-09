@@ -295,7 +295,7 @@ void startServer (Server* server)
         handleErrorAndExit("startServer() failed: server is already started");
 
     // Load the files in the cache
-    server->cache = buildCacheFromDisk(server->parameters->root_data_directory, 32000000);
+    server->cache = buildCacheFromDisk(server->parameters->root_data_directory, 320000000);
     printFileCache(server->cache); // TODO: Debug/improve
 
     // Attach the local adress to the socket, and make it a listener
