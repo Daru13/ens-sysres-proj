@@ -25,8 +25,10 @@ build/parse_header.o: src/parse_header.c src/parse_header.h src/http.h src/toolb
 
 src/parse_header.h: src/http.h
 
-build/http.o: src/http.c src/http.h src/parse_header.h src/toolbox.h
+build/http.o: src/http.c src/http.h src/parse_header.h src/file_cache.h src/toolbox.h
 	$(CC) $(CCFLAGS) -c src/http.c -o build/http.o	
+
+src/http.h: src/file_cache.h
 
 build/file_cache.o: src/file_cache.c src/file_cache.h src/toolbox.h
 	$(CC) $(CCFLAGS) -c src/file_cache.c -o build/file_cache.o

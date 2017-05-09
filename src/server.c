@@ -401,54 +401,18 @@ void readFromClient (Server* server, Client* client)
 }
 
 // TODO: CLEAN THIS!
+// TODO: do this in another thread?
 void processClientRequest (Server* server, Client* client)
 {
     client->state = STATE_PROCESSING_REQUEST;
 
     // TODO: start by checking whether the request is complete or not?
     parseHttpRequest(client->http_request, client->request_buffer);
-
-    // TODO: REMOVE DEBUG //////////////////////////////////////////////////////
-    static char dummy[256];
-    File* fetched_file = findFileInCache(server->cache,
-                                         client->http_request->header->requestTarget);
-    if (fetched_file != NOT_FOUND)
-    {
-        printf("\n\nFILE '%s' has been found!\n\n", client->http_request->header->requestTarget);
-        initAnswerHttpMessage(client->http_answer, HTTP_V1_1, HTTP_200);
-
-        client->http_answer->content->body   = fetched_file->content;
-        client->http_answer->content->length = fetched_file->size;
-        client->http_answer->content->offset = 0;
-
-        client->http_answer->header->content_type   = fetched_file->type;
-        client->http_answer->header->content_length = fetched_file->size;
-
-        sprintf(dummy, "HTTP/1.1 200\r\nContent-Length: %d\r\nContent-Type: %s\r\n\r\n",
-            client->http_answer->header->content_length,
-            client->http_answer->header->content_type);
-    }
-    else
-    {   
-        printf("\n\nFILE '%s' NOT FOUND!\n\n", client->http_request->header->requestTarget);
-        initAnswerHttpMessage(client->http_answer, HTTP_V1_1, HTTP_404);
-
-        client->http_answer->content->body   = NULL;
-        client->http_answer->content->length = 0;
-        client->http_answer->content->offset = 0;
-
-        client->http_answer->header->content_type   = "";
-        client->http_answer->header->content_length = 0;
-
-        sprintf(dummy, "HTTP/1.1 404 File not found!\r\n\r\n");
-    }
-
-    client->answer_header_buffer        = strcpy(client->answer_header_buffer, dummy);
-    client->answer_header_buffer_length = strlen(dummy);
+    produceHttpAnswer(client->http_request, client->http_answer, server->cache,
+                     client->answer_header_buffer, &(client->answer_header_buffer_length));
     client->answer_header_buffer_offset = 0;
 
     client->state = STATE_ANSWERING;
-    ////////////////////////////////////////////////////////////////////////////
 }
 
 // Only write the HTTP header buffer on the socket

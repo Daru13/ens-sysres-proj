@@ -1,6 +1,8 @@
 #ifndef __H_HTTP__
 #define __H_HTTP__
 
+#include "file_cache.h"
+
 // Useful, finite types related to HTTP
 typedef enum HttpVersion {
     HTTP_V1_0, // Possibly (partially?) handled?
@@ -30,10 +32,12 @@ typedef enum HttpCode {
     HTTP_403, // Forbidden
     HTTP_404, // Not found
     HTTP_405, // Method not allowed
+    HTTP_411, // Length required
+    HTTP_414, // Too-long URI
     HTTP_500, // Internal server error
     HTTP_501, // Not implemented
+    HTTP_503, // Service unavailable
     HTTP_505, // HTTP version not supported
-    HTTP_509, // Bandwith limit exceeeded [often used for too many clients?]
 
     // TODO: Possibly add more methods?
     // Not sure we can handle many more in limited time, though
@@ -98,5 +102,7 @@ void initAnswerHttpMessage (HttpMessage* message,
                             const HttpVersion version, const HttpCode code);
 
 void parseHttpRequest (HttpMessage* request, char* buffer);
+void produceHttpAnswer (HttpMessage* request, HttpMessage* answer, const FileCache* cache,
+                        char* answer_header_buffer, int* answer_header_buffer_length);
 
 #endif

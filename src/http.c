@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "toolbox.h"
+#include "file_cache.h"
 #include "parse_header.h"
 #include "http.h"
 
@@ -123,7 +125,6 @@ void initAnswerHttpMessage (HttpMessage* message,
 // HTTP REQUEST PARSING
 // -----------------------------------------------------------------------------
 
-// TODO: do this in another thread?
 // Parse a HTTP request from a buffer, and set the various fields of the given HttpMessage
 void parseHttpRequest (HttpMessage* request, char* buffer)
 {
@@ -135,4 +136,44 @@ void parseHttpRequest (HttpMessage* request, char* buffer)
 // HTTP ANSWER PRODUCING
 // -----------------------------------------------------------------------------
 
-// TODO
+// TODO: this must be rewritten and improved!
+void produceHttpAnswer (HttpMessage* request, HttpMessage* answer, const FileCache* cache,
+                        char* answer_header_buffer, int* answer_header_buffer_length)
+{
+    static char dummy[256];
+    File* fetched_file = findFileInCache(cache, request->header->requestTarget);
+    if (fetched_file != NOT_FOUND)
+    {
+        printf("\n\nFILE '%s' has been found!\n\n", request->header->requestTarget);
+        initAnswerHttpMessage(answer, HTTP_V1_1, HTTP_200);
+
+        answer->content->body   = fetched_file->content;
+        answer->content->length = fetched_file->size;
+        answer->content->offset = 0;
+
+        answer->header->content_type   = fetched_file->type;
+        answer->header->content_length = fetched_file->size;
+
+        sprintf(dummy, "HTTP/1.1 200\r\nContent-Length: %d\r\nContent-Type: %s\r\n\r\n",
+            answer->header->content_length,
+            answer->header->content_type);
+    }
+    else
+    {   
+        printf("\n\nFILE '%s' NOT FOUND!\n\n", request->header->requestTarget);
+        initAnswerHttpMessage(answer, HTTP_V1_1, HTTP_404);
+
+        answer->content->body   = NULL;
+        answer->content->length = 0;
+        answer->content->offset = 0;
+
+        answer->header->content_type   = "";
+        answer->header->content_length = 0;
+
+        sprintf(dummy, "HTTP/1.1 404 File not found!\r\n\r\n");
+    }
+
+    // TODO: ugly solution here, to be modified...
+    answer_header_buffer        = strcpy(answer_header_buffer, dummy);
+    *answer_header_buffer_length = strlen(dummy);
+}
