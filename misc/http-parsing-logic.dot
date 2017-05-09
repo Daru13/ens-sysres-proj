@@ -1,0 +1,82 @@
+digraph HTTP_parsing_logic {
+	// *** STYLING OPTIONS ***
+	// Main steps are put in boxes
+	clientRequest [shape=box];
+	parseHeader [shape=box];
+	parseHeaderQueryLine [shape=box];
+	parseVersion [shape=box];
+	parseMethod [shape=box];
+	parseURI [shape=box];
+	parseOptionFields [shape=box];
+	parseBody [shape=box];
+	produceResponse [shape=box];
+
+	// Error codes (4** and 5**) are in red
+	400 [color=red];
+	404 [color=red];
+	405 [color=red];
+	411 [color=red];
+	414 [color=red];
+	501 [color=red];
+	503 [color=red];
+	505 [color=red];
+
+	// OK codes (2**) are in green
+	200 [color=green];
+
+	// *** GRAPH DEFINITION ***
+	// Origin data: HTTP request from the client
+	clientRequest -> parseHeader;
+	clientRequest -> 503 [label="Service unavailable"]; // Not here?
+
+	// The header is parsed in two time: the query line, and the option fields
+	parseHeader -> parseHeaderQueryLine;
+
+	parseHeaderQueryLine -> parseVersion
+	parseVersion -> 505 [label="Unsupported HTTP version"];
+	parseVersion -> 400 [label="Unknown HTTP version"]; // Use 505 code instead?
+	parseVersion -> 400 [label="Syntax error"] // ?
+	
+	parseVersion -> parseMethod
+	parseMethod -> 501 [label="Method not implemented"];
+	parseMethod -> 400 [label="Syntax error"];
+
+	parseMethod -> parseURI
+	parseURI -> 405 [label="Method not allowed"]; // Not allowed for the given ressource
+	parseURI -> 404 [label="File not found"];
+	parseURI -> 414 [label="URI is too long"];
+	parseURI -> 400 [label="Syntax error"];
+
+	// If the query line is valid, options fields are then parsed
+	parseURI -> parseOptionFields;
+
+	// There may be a syntax error in any recognized field
+	// Unknwon fields are simply ignored (much better portability in limited time)
+	parseOptionFields -> 404 [label="Syntax error"];
+	parseOptionFields -> 400 [label="Bad request (no Host field)"];
+
+	parseOptionFields -> Host [dir=none]; // Required?
+
+	parseOptionFields -> Date [dir=none];
+	parseOptionFields -> AcceptLanguage [dir=none];
+	parseOptionFields -> AcceptEncoding [dir=none];
+	parseOptionFields -> AcceptCharset [dir=none];
+	parseOptionFields -> Connection [dir=none];
+	parseOptionFields -> UserAgent [dir=none]; // Useless?
+	parseOptionFields -> ContentLength [dir=none]; // TODO: throw an error if too long?
+
+	// TODO: throw and error if the header is too long?
+
+	// Once all the option fields have been parsed, wait for a blank line, and parse the body
+	parseOptionFields -> parseBody [label="Blank line (\\r\\n)"];
+
+	// Require a ContentLength in order to parse any body ??
+	parseBody -> 411 [label="Length required (for parsing any body)"];
+
+	// If no mistake was found, produce a valid answer
+	parseBody -> 200 [label="OK"]
+
+	// Finally, when the request is fully parsed, produce the HTTP response
+	parseBody -> produceResponse
+	
+}
