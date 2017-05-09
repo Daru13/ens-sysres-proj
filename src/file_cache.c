@@ -276,9 +276,9 @@ void setFileType (File* file, char* path)
     if (nb_bytes_read < 0)
         handleErrorAndExit("read() failed in setFileType()");
     file->type[nb_bytes_read - 1] = '\0';
-
+/*
     printf("Pipe output (%d byte(s) read): %s\n", nb_bytes_read, file->type);
-
+*/
     return_value = close(pipe_fds[PIPE_OUT]);
     if (return_value < 0)
         handleErrorAndExit("close() failed in setFileType()");
@@ -323,11 +323,11 @@ Folder* recursivelyBuildFolderFromDisk (char* path)
         int return_value = stat(current_path, &file_info);
         if (return_value < 0)
             handleErrorAndExit("stat() failed in recursivelyBuildFolderFromDisk()");
-
+/*
         printf("Current entry: %s (DIR: %s)\n", current_entry_name,
                (S_ISDIR(file_info.st_mode) ? "true" : "false"));
         printf("Current path: %s\n", current_path);
-
+*/
         // Check which kind of file the current entry is, 
         // and update counters accordingly
         if (S_ISREG(file_info.st_mode))

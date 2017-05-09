@@ -12,7 +12,7 @@ all: server
 server: $(OBJS)
 	$(CC) $(CCFLAGS) $(OBJS) -o webserver
 
-build/main.o: src/main.c src/main.h src/server.h src/file_cache.h src/parse_header.h src/toolbox.h
+build/main.o: src/main.c src/main.h src/server.h src/toolbox.h
 	$(CC) $(CCFLAGS) -c src/main.c -o build/main.o
 
 build/server.o: src/server.c src/server.h src/http.h src/file_cache.h src/toolbox.h

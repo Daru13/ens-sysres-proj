@@ -28,18 +28,6 @@ int createWebSocket ()
     return sockfd;
 }
 
-/*
-void connectWebSocket (const int sockfd, const struct sockaddr *address)
-{
-    int return_value = connect(sockfd, address, sizeof address);
-    if (return_value < 0)
-    {
-        perror("connect() failed");
-        exit(1);
-    }
-}
-*/
-
 struct sockaddr_in getLocalAddress (const int port)
 {
     struct sockaddr_in address;
@@ -95,8 +83,21 @@ Client* createClient ()
     return new_client;
 }
 
+void disconnectClient (Client* client)
+{
+    printf("Disconnecting client (fd: %d)", client->fd);
+
+    int success = close(client->fd);
+    if (success < 0)
+        handleErrorAndExit("close() failed in disconnectClient()");
+}
+
 void deleteClient (Client* client)
 {
+    // First, disconnect the client
+    disconnectClient(client);
+
+    // Then, free allocated structures
     free(client->request_buffer);
     deleteHttpMessage(client->http_request);
 
@@ -184,8 +185,22 @@ Server* createServer ()
     return new_server;
 }
 
+void disconnectServer (Server* server)
+{
+    printf("Disconnecting server (fd: %d)\n", server->sockfd);
+
+    int success = close(server->sockfd);
+    if (success < 0)
+        handleErrorAndExit("close() failed in disconnectServer()");
+
+    server->is_started = false;
+}
+
 void deleteServer (Server* server)
 {
+    // Start by disconnecting the server (i.e. closing the listening socket)
+    disconnectServer(server);
+
     // Delete all the clients
     Client* current_client = server->clients;
     while (current_client != NULL)
@@ -278,6 +293,10 @@ void startServer (Server* server)
 {
     if (serverIsStarted(server))
         handleErrorAndExit("startServer() failed: server is already started");
+
+    // Load the files in the cache
+    server->cache = buildCacheFromDisk(server->parameters->root_data_directory, 32000000);
+    printFileCache(server->cache); // TODO: Debug/improve
 
     // Attach the local adress to the socket, and make it a listener
     bindWebSocket(server->sockfd, &server->address);
@@ -388,8 +407,7 @@ void readFromClient (Server* server, Client* client)
     printf("%s\n", client->request_buffer);
 
     // If the read() call returned 0 (no byte has been read), it means the
-    // client has ended the connection.
-    // Thus, it can be removed from the list of clients
+    // client has ended the connection, and can be removed from the list of clients
     if (nb_bytes_read == 0)
     {
         removeClientFromServer(server, client);
@@ -407,7 +425,14 @@ void processClientRequest (Server* server, Client* client)
     client->state = STATE_PROCESSING_REQUEST;
 
     // TODO: start by checking whether the request is complete or not?
+
+    // Step 1: analyze the request
+    initRequestHttpMessage(client->http_request);
     parseHttpRequest(client->http_request, client->request_buffer);
+
+    // Step 2: produce the answer
+    // TODO: what about the default HTTP code?
+    initAnswerHttpMessage(client->http_answer, HTTP_V1_1, HTTP_400);
     produceHttpAnswer(client->http_request, client->http_answer, server->cache,
                      client->answer_header_buffer, &(client->answer_header_buffer_length));
     client->answer_header_buffer_offset = 0;

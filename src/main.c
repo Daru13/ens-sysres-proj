@@ -1,38 +1,61 @@
+// Weird workaround for having all signal handling tools we need
+//#define _POSIX_C_SOURCE 200809L
+#define _POSIX_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include "toolbox.h"
-#include "file_cache.h"
 #include "server.h"
 #include "main.h"
 
+#include <signal.h>
+
 // -----------------------------------------------------------------------------
+
+Server* server = NULL;
+
+// To improve!
+void cleanClosing ()
+{
+    printf("Now cleaning and closing the server...\n");
+    if (server != NULL)
+        deleteServer(server);
+
+    server = NULL;
+    printf("Cleaning done, goodbye!\n");
+}
+
+void handleSIGINT (int signal_id)
+{
+    printf("Signal SIGINT received!\n");
+    exit(EXIT_SUCCESS);
+}
 
 int main (const int argc, const char* argv[])
 {
-    // printTitle("Web server -- by Camille GOBERT, Hugo MANET");
-    // printUsage(argv);
+    // If there is a server, disconnect and close it at exit
+    atexit(cleanClosing);
 
-    Server* server = createServer();
+    // Handle SIGINT, to exit the program when received
+    struct sigaction sigint_handler;
+
+    sigset_t signal_mask;
+    sigfillset(&signal_mask);
+
+    sigint_handler.sa_handler = handleSIGINT;
+    sigint_handler.sa_flags   = 0;
+    sigint_handler.sa_mask    = signal_mask;
+
+    int success = sigaction(SIGINT, &sigint_handler, NULL);
+    if (success < 0)
+        handleErrorAndExit("sigaction() failed in main()");
+
+    // Create, start and run the server
+    server = createServer();
     defaultInitServer(server);
-
-    FileCache* cache = buildCacheFromDisk(server->parameters->root_data_directory,
-                                          32 * 1000000);
-    printFileCache(cache);
-    server->cache = cache;
-
     startServer(server);
-    handleClientRequests(server);
-/*
-    File*  f  = findFileInCache(cache, "a");
-    File * f2 = findFileInCache(cache, "abcde/xyz");
-    File * f3 = findFileInCache(cache, "subdir/fff");
 
-    printf("f = %p, f2 = %p, f3 = %p\n", (void*) f, (void*) f2, (void*) f3);
-    printFile(f,  0);
-    printFile(f3, 0);
-*/
-    // deleteFileCache(cache);
-    // deleteServer(server);
+    handleClientRequests(server);
 
     return 0;
 }

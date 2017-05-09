@@ -145,7 +145,7 @@ void produceHttpAnswer (HttpMessage* request, HttpMessage* answer, const FileCac
     if (fetched_file != NOT_FOUND)
     {
         printf("\n\nFILE '%s' has been found!\n\n", request->header->requestTarget);
-        initAnswerHttpMessage(answer, HTTP_V1_1, HTTP_200);
+        //initAnswerHttpMessage(answer, HTTP_V1_1, HTTP_200);
 
         answer->content->body   = fetched_file->content;
         answer->content->length = fetched_file->size;
@@ -161,7 +161,7 @@ void produceHttpAnswer (HttpMessage* request, HttpMessage* answer, const FileCac
     else
     {   
         printf("\n\nFILE '%s' NOT FOUND!\n\n", request->header->requestTarget);
-        initAnswerHttpMessage(answer, HTTP_V1_1, HTTP_404);
+        //initAnswerHttpMessage(answer, HTTP_V1_1, HTTP_404);
 
         answer->content->body   = NULL;
         answer->content->length = 0;

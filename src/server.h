@@ -81,20 +81,19 @@ typedef struct Server {
 #define SERV_DEFAULT_ROOT_DATA_DIR    "./www"
 
 // Named, useful constants
-#define FD_NO_CLIENT     -1
 #define POLL_NO_TIMEOUT  -1
 #define POLL_NO_POLLING  -1
 
 // -----------------------------------------------------------------------------
 
 int createWebSocket ();
-// void connectWebSocket (const int sockfd, const struct sockaddr *address);
 struct sockaddr_in getLocalAddress (const int port);
 void bindWebSocket (const int sockfd, const struct sockaddr_in *address);
 void listenWebSocket (const int sockfd, const int queue_max_length);
 int acceptWebSocket (const int sockfd, struct sockaddr_in* address);
 
 Client* createClient ();
+void disconnectClient (Client* client);
 void deleteClient (Client* client);
 void initClient (Client* client, const int fd, const struct sockaddr_in address,
                  const ServParameters* parameters);
@@ -102,6 +101,7 @@ char* getClientStateAsString (const ClientState state);
 void printClient (const Client* client);
 
 Server* createServer ();
+void disconnectServer (Server* server);
 void deleteServer (Server* server);
 void initServer (Server* server, const int sockfd, const struct sockaddr_in address,
                  ServParameters* parameters);
@@ -116,6 +116,8 @@ Client* acceptNewClient (Server* server);
 
 void readFromClient (Server* server, Client* client);
 void processClientRequest (Server* server, Client* client);
+bool writeHttpHeaderToClient (Server* server, Client* client);
+bool writeHttpContentToClient (Server* server, Client* client);
 void writeToClient (Server* server, Client* client);
 
 void handleClientRequests (Server* server);
