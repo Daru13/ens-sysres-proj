@@ -102,8 +102,8 @@ void initRequestHttpMessage (HttpMessage* message);
 void initAnswerHttpMessage (HttpMessage* message,
                             const HttpVersion version, const HttpCode code);
 
-void parseHttpRequest (HttpMessage* request, char* buffer);
-void produceHttpAnswer (HttpMessage* request, HttpMessage* answer, const FileCache* cache,
+HttpCode parseHttpRequest (HttpMessage* request, char* buffer);
+void produceHttpAnswer (const HttpMessage* request, HttpMessage* answer, const FileCache* cache,
                         char* answer_header_buffer, int* answer_header_buffer_length);
 
 #endif

@@ -128,9 +128,9 @@ void initAnswerHttpMessage (HttpMessage* message,
 // -----------------------------------------------------------------------------
 
 // Parse a HTTP request from a buffer, and set the various fields of the given HttpMessage
-void parseHttpRequest (HttpMessage* request, char* buffer)
+HttpCode parseHttpRequest (HttpMessage* request, char* buffer)
 {
-    int http_code /*?*/ = fillHttpHeaderWith(request->header, buffer);
+    return fillHttpHeaderWith(request->header, buffer);
     // TODO: what about the body?
 }
 
@@ -139,7 +139,7 @@ void parseHttpRequest (HttpMessage* request, char* buffer)
 // -----------------------------------------------------------------------------
 
 // TODO: this must be rewritten and improved!
-void produceHttpAnswer (HttpMessage* request, HttpMessage* answer, const FileCache* cache,
+void produceHttpAnswer (const HttpMessage* request, HttpMessage* answer, const FileCache* cache,
                         char* answer_header_buffer, int* answer_header_buffer_length)
 {
     static char dummy[256];

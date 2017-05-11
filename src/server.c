@@ -429,11 +429,12 @@ void processClientRequest (Server* server, Client* client)
 
     // Step 1: analyze the request
     initRequestHttpMessage(client->http_request);
-    parseHttpRequest(client->http_request, client->request_buffer);
+    HttpCode requestStatus = parseHttpRequest(client->http_request, client->request_buffer);
 
     // Step 2: produce the answer
     // TODO: what about the default HTTP code?
-    initAnswerHttpMessage(client->http_answer, HTTP_V1_1, HTTP_400);
+
+    initAnswerHttpMessage(client->http_answer, HTTP_V1_1, requestStatus);
     produceHttpAnswer(client->http_request, client->http_answer, server->cache,
                      client->answer_header_buffer, &(client->answer_header_buffer_length));
     client->answer_header_buffer_offset = 0;

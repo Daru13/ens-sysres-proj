@@ -21,7 +21,7 @@
 
 #define CHECK_SYNTAX {\
     if (end == NULL)\
-        return 400;\
+        return HTTP_400;\
 }
 
 // -----------------------------------------------------------------------------
@@ -115,7 +115,7 @@ OptionValue getOptionValueFromString (const Option opt[], char* str,
 }
 
 // I swear i'll put the buffer back in its state after i've dealt with it
-int fillHttpHeaderWith (HttpHeader* header, char* buffer)
+HttpCode fillHttpHeaderWith (HttpHeader* header, char* buffer)
 {
     char* pos = buffer;
     char* end = strchr(pos, ' ');
@@ -177,11 +177,11 @@ int fillHttpHeaderWith (HttpHeader* header, char* buffer)
         {
             case HTTP_V1_0:
             case HTTP_V2_0:
-                return 505;
+                return HTTP_505;
             default:
                 // Probably syntax error
                 // TODO : check if it's not just a version we don't implement and don't have heard from, which SHOULD be a 505 error.
-                return 400;
+                return HTTP_400;
         }
     }
 
@@ -211,7 +211,7 @@ int fillHttpHeaderWith (HttpHeader* header, char* buffer)
         {
             case HEAD_HOST:
                 if (header->host)
-                    return 400;
+                    return HTTP_400;
 
                 header->host = malloc((lenValue+1) * sizeof(char));
                 if (header->host == NULL)
@@ -227,7 +227,7 @@ int fillHttpHeaderWith (HttpHeader* header, char* buffer)
                     int lenInit = strlen(header->accept);
                     char* new = realloc(header->accept, (lenInit+1+lenValue+1) * sizeof(char));
                     if (new == NULL)
-                        return 500; // ???
+                        handleErrorAndExit("realloc() failed in fillHttpHeaderWith()");
 
                     header->accept = new;
                     header->accept[lenInit] = ',';
@@ -242,5 +242,5 @@ int fillHttpHeaderWith (HttpHeader* header, char* buffer)
         }
     }
 
-    return 200;
+    return HTTP_200;
 }
