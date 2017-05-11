@@ -162,10 +162,19 @@ void produceHttpAnswer (const HttpMessage* request, HttpMessage* answer, const F
             printf("\n\nFILE '%s' has been found!\n\n", request->header->requestTarget);
             //initAnswerHttpMessage(answer, HTTP_V1_1, HTTP_200);
 
-            answer->content->body   = fetched_file->content;
-            answer->content->length = fetched_file->size;
-            answer->content->offset = 0;
+            if (request->header->method == HTTP_GET)
+            {
+                answer->content->body   = fetched_file->content;
+                answer->content->length = fetched_file->size;
+                answer->content->offset = 0;
+            }
+            else //if (request->header->method == HTTP_HEAD)
+            {
+                answer->content->body   = NULL;
+                answer->content->length = 0;
+                answer->content->offset = 0;
 
+            }
             answer->header->content_type     = fetched_file->type;
             answer->header->content_length   = fetched_file->size;
             answer->header->content_encoding = fetched_file->state == STATE_LOADED_COMPRESSED ? "gzip" : "identity";
