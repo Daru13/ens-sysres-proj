@@ -68,6 +68,7 @@ typedef struct HttpHeader {
     char* accept;
     int   content_length;
     char* content_type;
+    char* content_encoding;
 } HttpHeader;
 
 // Structure representing a chunk of (text) data

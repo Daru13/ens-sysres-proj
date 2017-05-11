@@ -21,7 +21,7 @@ HttpHeader* createHttpHeader ()
 
 void deleteHttpHeader (HttpHeader* header)
 {
-    // TODO: free tons of strings (or other kinds of objects), used by header fields?
+    // TODO: free tons of strings (or other kinds of objects), used by header fields
     free(header);
 }
 
@@ -34,12 +34,13 @@ void initRequestHttpHeader (HttpHeader* header)
     
     header->requestType   = HTTP_NO_REQUEST_TYPE;
     
-    header->requestTarget  = NULL;
-    header->query          = NULL;
-    header->host           = NULL;
-    header->accept         = NULL;
-    header->content_length = 0;
-    header->content_type   = NULL;
+    header->query            = NULL;
+    header->host             = NULL;
+    header->accept           = NULL;
+    header->requestTarget    = NULL;
+    header->content_length   = 0;
+    header->content_type     = NULL;
+    header->content_encoding = NULL;
 }
 
 // Made for headers of outgoing messages (i.e. built by the server to answer requests)
@@ -52,12 +53,13 @@ void initAnswerHttpHeader (HttpHeader* header,
 
     header->requestType = HTTP_NO_REQUEST_TYPE;
     
-    header->requestTarget  = NULL;
-    header->query          = NULL;
-    header->host           = NULL;
-    header->accept         = NULL;
-    header->content_length = 0;
-    header->content_type   = NULL;
+    header->query            = NULL;
+    header->host             = NULL;
+    header->accept           = NULL;
+    header->requestTarget    = NULL;
+    header->content_length   = 0;
+    header->content_type     = NULL;
+    header->content_encoding = NULL;
 }
 
 // -----------------------------------------------------------------------------
@@ -151,12 +153,14 @@ void produceHttpAnswer (HttpMessage* request, HttpMessage* answer, const FileCac
         answer->content->length = fetched_file->size;
         answer->content->offset = 0;
 
-        answer->header->content_type   = fetched_file->type;
-        answer->header->content_length = fetched_file->size;
+        answer->header->content_type     = fetched_file->type;
+        answer->header->content_length   = fetched_file->size;
+        answer->header->content_encoding = fetched_file->state == STATE_LOADED_COMPRESSED ? "gzip" : "identity";
 
-        sprintf(dummy, "HTTP/1.1 200\r\nContent-Length: %d\r\nContent-Type: %s\r\n\r\n",
+        sprintf(dummy, "HTTP/1.1 200\r\nContent-Length: %d\r\nContent-Type: %s\r\nContent-Encoding: %s\r\n\r\n",
             answer->header->content_length,
-            answer->header->content_type);
+            answer->header->content_type,
+            answer->header->content_encoding);
     }
     else
     {   
