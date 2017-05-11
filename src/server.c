@@ -85,7 +85,7 @@ Client* createClient ()
 
 void disconnectClient (Client* client)
 {
-    printf("Disconnecting client (fd: %d)", client->fd);
+    printf("Disconnecting client (fd: %d)\n", client->fd);
 
     int success = close(client->fd);
     if (success < 0)
@@ -119,7 +119,7 @@ void initClient (Client* client, const int fd, const struct sockaddr_in address,
     client->request_buffer_length = 0;
     client->request_buffer_offset = 0;
 
-    client->request_buffer = malloc(parameters->read_buffer_size * sizeof(char));
+    client->request_buffer = malloc(parameters->request_buffer_size * sizeof(char));
     if (client->request_buffer == NULL)
         handleErrorAndExit("malloc() failed in initClient()");
 
@@ -130,7 +130,7 @@ void initClient (Client* client, const int fd, const struct sockaddr_in address,
     client->answer_header_buffer_length = 0;
     client->answer_header_buffer_offset = 0;
 
-    client->answer_header_buffer = malloc(parameters->write_buffer_size * sizeof(char));
+    client->answer_header_buffer = malloc(parameters->answer_header_buffer_size * sizeof(char));
     if (client->answer_header_buffer == NULL)
         handleErrorAndExit("malloc() failed in initClient()");
 
@@ -252,9 +252,10 @@ void defaultInitServer (Server* server)
 
     parameters->queue_max_length    = SERV_DEFAULT_QUEUE_MAX_LENGTH;
     parameters->max_nb_clients      = SERV_DEFAULT_MAX_NB_CLIENTS;
-    parameters->read_buffer_size    = SERV_DEFAULT_READ_BUF_SIZE;
-    parameters->write_buffer_size   = SERV_DEFAULT_WRITE_BUF_SIZE;
+    parameters->request_buffer_size    = SERV_DEFAULT_REQUEST_BUF_SIZE;
+    parameters->answer_header_buffer_size   = SERV_DEFAULT_ANS_HEADER_BUF_SIZE;
     parameters->root_data_directory = SERV_DEFAULT_ROOT_DATA_DIR;
+
 
     initServer(server, sockfd, address, parameters);
 }
@@ -397,9 +398,9 @@ void readFromClient (Server* server, Client* client)
 {
     // Read data from the socket, and null-terminate the buffer
     printf("Reading up to %d bytes from client %d...\n",
-           server->parameters->read_buffer_size - 1, client->fd);
+           server->parameters->request_buffer_size - 1, client->fd);
     int nb_bytes_read = read(client->fd, client->request_buffer,
-                             server->parameters->read_buffer_size - 1);
+                             server->parameters->request_buffer_size - 1);
     client->request_buffer[nb_bytes_read] = '\0';
 
     // Debug printing

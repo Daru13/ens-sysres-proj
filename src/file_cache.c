@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "toolbox.h"
+#include "system.h"
 #include "file_cache.h"
 
 // -----------------------------------------------------------------------------
@@ -22,11 +23,12 @@ File* createFile ()
     return new_file;
 }
 
-void initFile (File* file, char* name, char* content, int size)
+void initFile (File* file)
 {
-    file->name    = name;
-    file->content = content;
-    file->size    = size;
+    file->name    = NULL;
+    file->state   = STATE_NOT_LOADED;
+    file->content = NULL;
+    file->size    = 0;
 
     file->type = malloc(MAX_FILE_TYPE_LENGTH * sizeof(char));
     if (file->type == NULL)
@@ -37,10 +39,10 @@ void initFile (File* file, char* name, char* content, int size)
         handleErrorAndExit("malloc() failed in initFile()");
 }
 
-File* createAndInitFile (char* name, char* content, int size)
+File* createAndInitFile ()
 {
     File* new_file = createFile();
-    initFile(new_file, name, content, size);
+    initFile(new_file);
 
     return new_file;
 }
@@ -55,6 +57,22 @@ void deleteFile (File* file)
     free(file);
 }
 
+char* getFileStateAsString (const FileState state)
+{
+    switch (state)
+    {
+        case STATE_NOT_LOADED:
+            return "NOT_LOADED";
+        case STATE_LOADED_RAW:
+            return "LOADED_RAW";
+        case STATE_LOADED_COMPRESSED:
+            return "LOADED_COMPRESSED";
+
+        default:
+            return "UNKNOWN STATE";
+    }
+}
+
 void printFile (const File* file, const int indent)
 {
     char indent_space[indent + 1];
@@ -62,8 +80,9 @@ void printFile (const File* file, const int indent)
         indent_space[i] = ' ';
     indent_space[indent] = '\0';
 
-    printf("%s%s (%ssize:%s %d, %stype:%s %s)\n",
+    printf("%s%s (%sstate:%s %s, %ssize:%s %d, %stype:%s %s)\n",
            indent_space, file->name,
+           COLOR_BOLD, COLOR_RESET, getFileStateAsString(file->state),
            COLOR_BOLD, COLOR_RESET, file->size,
            COLOR_BOLD, COLOR_RESET, file->type);
 }
@@ -223,65 +242,59 @@ void printFileCache (const FileCache* cache)
 // CACHE BUILDING
 // -----------------------------------------------------------------------------
 
-// TODO: move this elsewhere
-#define PIPE_IN  1
-#define PIPE_OUT 0
-
-// By using Unix program "file", guess the type and then enconding of a file
-// It is ran as a background process (on each call), on the given path
+// By using standard program "file", guess the type and encoding of a file
 void setFileType (File* file, char* path)
 {
-    pid_t pipe_fds[2];
-    int return_value = pipe(pipe_fds);
-    if (return_value < 0)
-        handleErrorAndExit("pipe() failed in setFileType()");
-
-    pid_t fork_pid = fork();
-    if (fork_pid < 0)
-        handleErrorAndExit("fork() failed in setFileType()");
-
-    // Child process
-    if (fork_pid == 0)
-    {
-        // Program file must output in its parent's pipe output
-        return_value = close(pipe_fds[PIPE_OUT]);
-        if (return_value < 0)
-            handleErrorAndExit("close() failed in setFileType()");
-
-        return_value = dup2(pipe_fds[PIPE_IN], 1);
-        if (return_value < 0)
-            handleErrorAndExit("close() failed in setFileType()");        
-
-        char* exec_argv[] = {
+    char* command = "file";
+    char* execvp_argv[] = {
             "file",   // Command name (as argv[0])
             "--mime", // Output "[MIME type]; [MIME encoding]"
             "-0b",    // Do not prepend filename
             path,     // Path to the file
             NULL
-        };
+    };
 
-        execvp("file", exec_argv);
-        handleErrorAndExit("exec() failed in setFileType()");
+    int filetype_length = runReadableProcess(command, execvp_argv,
+                                             file->type, MAX_FILE_TYPE_LENGTH - 1);
+    
+    // Null-terminate the string by replacing the newline sent by 'file'
+    // If less than two bytes have been read, print a warning a leave the string empty
+    if (filetype_length < 2)
+    {
+        printWarning("unable to read a valid filetype of %s", path);
+        file->type[0] = '\0';
     }
+    else
+        file->type[filetype_length - 1] = '\0';
+}
 
-    // Father process
+// By using standard program "gzip", compress the file
+// Note: it assumes the normal file size is set in the structure!
+void compressFile (File* file, char* path)
+{
+    char* command = "gzip";
+    char* execvp_argv[] = {
+            "gzip",     // Command name (as argv[0])
+            "--stdout", // Output compressed data on stdout
+            path,       // Path to the file
+            NULL
+    };
 
-    return_value = close(pipe_fds[PIPE_IN]);
-    if (return_value < 0)
-        handleErrorAndExit("close() failed in setFileType()");
+    // Buffer where to store compressed data
+    // It is made larger than the normal file size,
+    // in case the compressed data is bigger than the raw one
+    // (magic heuristic here - may be improved!)
+    file->content = malloc((int) 1.2 * file->size * sizeof(char));
 
-    int nb_bytes_read = read(pipe_fds[PIPE_OUT],
-                             file->type,
-                             MAX_FILE_TYPE_LENGTH - 1);
-    if (nb_bytes_read < 0)
-        handleErrorAndExit("read() failed in setFileType()");
-    file->type[nb_bytes_read - 1] = '\0';
-/*
-    printf("Pipe output (%d byte(s) read): %s\n", nb_bytes_read, file->type);
-*/
-    return_value = close(pipe_fds[PIPE_OUT]);
-    if (return_value < 0)
-        handleErrorAndExit("close() failed in setFileType()");
+    int compressed_data_length = runReadableProcess(command, execvp_argv,
+                                                    file->content, (int) 1.2 * file->size);
+    
+    // Re-demension the allocated buffer to fit the actual compressed data size
+    file->content = realloc(file->content, compressed_data_length);
+    file->size    = compressed_data_length;
+
+    // Update the file state
+    file->state = STATE_LOADED_COMPRESSED;
 }
 
 // TODO: split this in smaller functions
@@ -381,21 +394,36 @@ Folder* recursivelyBuildFolderFromDisk (char* path)
             current_file_name = strcpy(current_file_name, current_entry_name);
             int   current_file_size = file_info.st_size;
 
-            // Copy the file's content into a buffer
-            char* current_file_content = malloc(current_file_size * sizeof(char));
-            if (current_file_content == NULL)
-                handleErrorAndExit("malloc() failed in recursivelyBuildFolderFromDisk()");
 
-            FILE* current_file = fopen(current_path, "r");
-            int nb_bytes_read = fread(current_file_content, sizeof(char),
-                                      current_file_size, current_file);
-            fclose(current_file);
+
+            // TODO: clean/explain
 
             // Create a File structure, and add it to the current folder
             printf("Creating file with name %s...\n", current_entry_name);
-            File* new_file_node = createAndInitFile(current_file_name,
-                                                    current_file_content,
-                                                    current_file_size);
+            File* new_file_node = createAndInitFile();
+
+            new_file_node->name = current_file_name;
+            new_file_node->size = current_file_size;
+
+            if (current_file_size < MIN_FILE_SIZE_FOR_GZIP)
+            {
+                char* current_file_content = malloc(current_file_size * sizeof(char));
+                if (current_file_content == NULL)
+                    handleErrorAndExit("malloc() failed in recursivelyBuildFolderFromDisk()");
+
+                FILE* current_file = fopen(current_path, "r");
+                int nb_bytes_read = fread(current_file_content, sizeof(char),
+                                          current_file_size, current_file);
+                fclose(current_file);
+
+                new_file_node->content = current_file_content;
+                new_file_node->state   = STATE_LOADED_RAW;
+            }
+            else
+            {
+                compressFile(new_file_node, current_path);
+            }
+
             setFileType(new_file_node, current_path);
 
             addFileToFolder(new_folder, new_file_node);

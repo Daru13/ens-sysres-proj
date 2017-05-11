@@ -4,7 +4,7 @@ CCFLAGS = -g -W -Wall -pedantic -std=c99
 
 ##### THIS LIST MUST BE UPDATED #####
 # List of all  object files which must be produced before any binary
-OBJS = build/toolbox.o build/file_cache.o build/parse_header.o build/http.o build/server.o build/main.o
+OBJS = build/toolbox.o build/system.o build/file_cache.o build/parse_header.o build/http.o build/server.o build/main.o
 
 # Dependencies and compiling rules
 all: server
@@ -32,6 +32,9 @@ src/http.h: src/file_cache.h
 
 build/file_cache.o: src/file_cache.c src/file_cache.h src/toolbox.h
 	$(CC) $(CCFLAGS) -c src/file_cache.c -o build/file_cache.o
+
+build/system.o: src/system.c src/system.h src/toolbox.h
+	$(CC) $(CCFLAGS) -c src/system.c -o build/system.o	
 
 build/toolbox.o: src/toolbox.c src/toolbox.h
 	$(CC) $(CCFLAGS) -c src/toolbox.c -o build/toolbox.o

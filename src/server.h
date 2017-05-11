@@ -48,8 +48,8 @@ typedef struct Client {
 typedef struct ServParameters {
     int   queue_max_length;
     int   max_nb_clients;
-    int   read_buffer_size;
-    int   write_buffer_size;
+    int   request_buffer_size;
+    int   answer_header_buffer_size;
     char* root_data_directory;
     // ...
 } ServParameters;
@@ -71,12 +71,12 @@ typedef struct Server {
 // -----------------------------------------------------------------------------
 
 // Default values concerning the server
-#define SERV_DEFAULT_PORT             4242
+#define SERV_DEFAULT_PORT                4242
 
-#define SERV_DEFAULT_QUEUE_MAX_LENGTH 5
-#define SERV_DEFAULT_MAX_NB_CLIENTS   64 
-#define SERV_DEFAULT_READ_BUF_SIZE    16384 // bytes
-#define SERV_DEFAULT_WRITE_BUF_SIZE   32768 // bytes
+#define SERV_DEFAULT_QUEUE_MAX_LENGTH    5
+#define SERV_DEFAULT_MAX_NB_CLIENTS      64 
+#define SERV_DEFAULT_REQUEST_BUF_SIZE    16384 // bytes
+#define SERV_DEFAULT_ANS_HEADER_BUF_SIZE 8192  // bytes
 
 #define SERV_DEFAULT_ROOT_DATA_DIR    "./www"
 

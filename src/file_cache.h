@@ -6,14 +6,21 @@
 // Structures representing files and folders
 // in order to cache them in memory
 
+typedef enum FileState {
+    STATE_NOT_LOADED,
+    STATE_LOADED_RAW,
+    STATE_LOADED_COMPRESSED
+} FileState;
+
 typedef struct File {
-    char* name;
+    char*     name;
+    FileState state;
 
     char* content;
     int   size;
 
     char* type;     // MIME type
-    char* encoding; // May take NO_ENCODING value
+    char* encoding; // Compression format (possibly NO_ENCODING)
 } File;
 
 typedef struct Folder {
@@ -44,14 +51,18 @@ typedef struct FileCache {
 #define MAX_FILE_TYPE_LENGTH     256
 #define MAX_FILE_ENCODING_LENGTH 64
 
+#define MIN_FILE_SIZE_FOR_GZIP   64 // bytes
+
 #define NOT_FOUND                NULL
+#define NO_ENCODING              NULL
 
 // -----------------------------------------------------------------------------
 
 File* createFile ();
-void initFile (File* file, char* name, char* content, int size);
-File* createAndInitFile (char* name, char* content, int size);
+void initFile (File* file);
+File* createAndInitFile ();
 void deleteFile (File* file);
+char* getFileStateAsString (const FileState state);
 void printFile (const File* file, const int indent);
 
 Folder* createFolder ();
@@ -69,6 +80,7 @@ void deleteFileCache (FileCache* cache);
 void printFileCache (const FileCache* cache);
 
 void setFileType (File* file, char* path);
+void compressFile (File* file, char* path);
 Folder* recursivelyBuildFolderFromDisk (char* path);
 FileCache* buildCacheFromDisk (char* root_path, const int max_size);
 
