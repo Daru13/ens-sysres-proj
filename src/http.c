@@ -143,38 +143,52 @@ void produceHttpAnswer (const HttpMessage* request, HttpMessage* answer, const F
                         char* answer_header_buffer, int* answer_header_buffer_length)
 {
     static char dummy[256];
-    File* fetched_file = findFileInCache(cache, request->header->requestTarget);
-    if (fetched_file != NOT_FOUND)
+    if (answer->header->code != HTTP_200)
     {
-        printf("\n\nFILE '%s' has been found!\n\n", request->header->requestTarget);
-        //initAnswerHttpMessage(answer, HTTP_V1_1, HTTP_200);
-
-        answer->content->body   = fetched_file->content;
-        answer->content->length = fetched_file->size;
-        answer->content->offset = 0;
-
-        answer->header->content_type     = fetched_file->type;
-        answer->header->content_length   = fetched_file->size;
-        answer->header->content_encoding = fetched_file->state == STATE_LOADED_COMPRESSED ? "gzip" : "identity";
-
-        sprintf(dummy, "HTTP/1.1 200\r\nContent-Length: %d\r\nContent-Type: %s\r\nContent-Encoding: %s\r\n\r\n",
-            answer->header->content_length,
-            answer->header->content_type,
-            answer->header->content_encoding);
-    }
-    else
-    {   
-        printf("\n\nFILE '%s' NOT FOUND!\n\n", request->header->requestTarget);
-        //initAnswerHttpMessage(answer, HTTP_V1_1, HTTP_404);
-
-        answer->content->body   = NULL;
+        answer->content->body = NULL;
         answer->content->length = 0;
         answer->content->offset = 0;
 
         answer->header->content_type   = "";
         answer->header->content_length = 0;
 
-        sprintf(dummy, "HTTP/1.1 404 File not found!\r\n\r\n");
+        sprintf(dummy, "HTTP/1.1 %d Error during analysis : unsupported request or syntax error\r\n\r\n", answer->header->code);
+    }
+    else
+    {
+        File* fetched_file = findFileInCache(cache, request->header->requestTarget);
+        if (fetched_file != NOT_FOUND)
+        {
+            printf("\n\nFILE '%s' has been found!\n\n", request->header->requestTarget);
+            //initAnswerHttpMessage(answer, HTTP_V1_1, HTTP_200);
+
+            answer->content->body   = fetched_file->content;
+            answer->content->length = fetched_file->size;
+            answer->content->offset = 0;
+
+            answer->header->content_type     = fetched_file->type;
+            answer->header->content_length   = fetched_file->size;
+            answer->header->content_encoding = fetched_file->state == STATE_LOADED_COMPRESSED ? "gzip" : "identity";
+
+            sprintf(dummy, "HTTP/1.1 200\r\nContent-Length: %d\r\nContent-Type: %s\r\nContent-Encoding: %s\r\n\r\n",
+                answer->header->content_length,
+                answer->header->content_type,
+                answer->header->content_encoding);
+        }
+        else
+        {   
+            printf("\n\nFILE '%s' NOT FOUND!\n\n", request->header->requestTarget);
+            //initAnswerHttpMessage(answer, HTTP_V1_1, HTTP_404);
+
+            answer->content->body   = NULL;
+            answer->content->length = 0;
+            answer->content->offset = 0;
+
+            answer->header->content_type   = "";
+            answer->header->content_length = 0;
+
+            sprintf(dummy, "HTTP/1.1 404 File not found!\r\n\r\n");
+        }
     }
 
     // TODO: ugly solution here, to be modified...

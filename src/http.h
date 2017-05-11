@@ -23,26 +23,26 @@ typedef enum HttpMethod {
 } HttpMethod;
 
 typedef enum HttpCode {
-    HTTP_100, // Continue
-    HTTP_200, // OK
-    HTTP_301, // Moved permanentlu
-    HTTP_302, // Moved temporarly
-    HTTP_400, // Bad request
-    HTTP_401, // Unauthorized
-    HTTP_403, // Forbidden
-    HTTP_404, // Not found
-    HTTP_405, // Method not allowed
-    HTTP_411, // Length required
-    HTTP_414, // Too-long URI
-    HTTP_500, // Internal server error
-    HTTP_501, // Not implemented
-    HTTP_503, // Service unavailable
-    HTTP_505, // HTTP version not supported
+    HTTP_100 = 100, // Continue
+    HTTP_200 = 200, // OK
+    HTTP_301 = 301, // Moved permanentlu
+    HTTP_302 = 302, // Moved temporarly
+    HTTP_400 = 400, // Bad request
+    HTTP_401 = 401, // Unauthorized
+    HTTP_403 = 403, // Forbidden
+    HTTP_404 = 404, // Not found
+    HTTP_405 = 405, // Method not allowed
+    HTTP_411 = 411, // Length required
+    HTTP_414 = 414, // Too-long URI
+    HTTP_500 = 500, // Internal server error
+    HTTP_501 = 501, // Not implemented
+    HTTP_503 = 503, // Service unavailable
+    HTTP_505 = 505, // HTTP version not supported
 
     // TODO: Possibly add more methods?
     // Not sure we can handle many more in limited time, though
 
-    HTTP_NO_CODE // No code needed (i.e. incomming message)
+    HTTP_NO_CODE = -1 // No code needed (i.e. incomming message)
 } HttpCode;
 
 typedef enum HttpRequestType {
