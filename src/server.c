@@ -125,7 +125,6 @@ void initClient (Client* client, const int fd, const struct sockaddr_in address,
 
     client->http_request = createHttpMessage();
     initRequestHttpMessage(client->http_request);
-    // TODO: is init required?
 
     client->answer_header_buffer_length = 0;
     client->answer_header_buffer_offset = 0;
@@ -135,7 +134,7 @@ void initClient (Client* client, const int fd, const struct sockaddr_in address,
         handleErrorAndExit("malloc() failed in initClient()");
 
     client->http_answer = createHttpMessage();
-    // TODO: initialize?
+    initAnswerHttpMessage(client->http_answer, HTTP_V1_1, HTTP_NO_CODE);
 }
 
 char* getClientStateAsString (const ClientState state)
@@ -146,8 +145,6 @@ char* getClientStateAsString (const ClientState state)
             return "WAITING_FOR_REQUEST";
         case STATE_PROCESSING_REQUEST:
             return "PROCESSING_REQUEST";
-/*        case STATE_PRODUCING_ANSWER:
-            return "PRODUCING_ANSWER";*/
         case STATE_ANSWERING:
             return "ANSWERING";
 
@@ -168,8 +165,15 @@ void printClient (const Client* client)
         client->answer_header_buffer_length, client->answer_header_buffer_offset);
     printf("| answer body  : ofs = %d, length = %d\n",
         client->http_answer->content->offset, client->http_answer->content->length);
-    printf("| requestTarget: %s\n", client->http_request->header->requestTarget != NULL ?
-                                    client->http_request->header->requestTarget : "");
+    printf("| request: target = %s, method = %s, code = %d\n",
+           client->http_request->header->requestTarget != NULL ?
+           client->http_request->header->requestTarget : "",
+           getHttpMethodAsString(client->http_request->header->method),
+           getHttpCodeValue(client->http_request->header->code));
+    printf("| answer: method = %s, code = %d, content_length = %d\n",
+           getHttpMethodAsString(client->http_answer->header->method),
+           getHttpCodeValue(client->http_answer->header->code),
+           client->http_answer->content->length);
 }
 
 // -----------------------------------------------------------------------------
@@ -250,12 +254,11 @@ void defaultInitServer (Server* server)
     if (parameters == NULL)
         handleErrorAndExit("malloc() failed in defaultInitServer()");
 
-    parameters->queue_max_length    = SERV_DEFAULT_QUEUE_MAX_LENGTH;
-    parameters->max_nb_clients      = SERV_DEFAULT_MAX_NB_CLIENTS;
-    parameters->request_buffer_size    = SERV_DEFAULT_REQUEST_BUF_SIZE;
-    parameters->answer_header_buffer_size   = SERV_DEFAULT_ANS_HEADER_BUF_SIZE;
-    parameters->root_data_directory = SERV_DEFAULT_ROOT_DATA_DIR;
-
+    parameters->queue_max_length          = SERV_DEFAULT_QUEUE_MAX_LENGTH;
+    parameters->max_nb_clients            = SERV_DEFAULT_MAX_NB_CLIENTS;
+    parameters->request_buffer_size       = SERV_DEFAULT_REQUEST_BUF_SIZE;
+    parameters->answer_header_buffer_size = SERV_DEFAULT_ANS_HEADER_BUF_SIZE;
+    parameters->root_data_directory       = SERV_DEFAULT_ROOT_DATA_DIR;
 
     initServer(server, sockfd, address, parameters);
 }
@@ -296,7 +299,8 @@ void startServer (Server* server)
         handleErrorAndExit("startServer() failed: server is already started");
 
     // Load the files in the cache
-    server->cache = buildCacheFromDisk(server->parameters->root_data_directory, 320000000);
+    server->cache = buildCacheFromDisk(server->parameters->root_data_directory,
+                                       320000000);
     printFileCache(server->cache); // TODO: Debug/improve
 
     // Attach the local adress to the socket, and make it a listener
@@ -419,7 +423,6 @@ void readFromClient (Server* server, Client* client)
     processClientRequest(server, client);
 }
 
-// TODO: CLEAN THIS!
 // TODO: do this in another thread?
 void processClientRequest (Server* server, Client* client)
 {
@@ -428,13 +431,21 @@ void processClientRequest (Server* server, Client* client)
     // TODO: start by checking whether the request is complete or not?
 
     // Step 1: analyze the request
-    initRequestHttpMessage(client->http_request);
-    parseHttpRequest(client->http_request, client->request_buffer);
+    HttpCode http_code = parseHttpRequest(client->http_request, client->request_buffer);
+    client->http_request->header->code = http_code;
+    printSubtitle("AFTER PARSING:\n\n");
+    printClient(client);
 
-    // Step 2: produce the answer
-    // TODO: what about the default HTTP code?
-    initAnswerHttpMessage(client->http_answer, HTTP_V1_1, HTTP_400);
-    
+    // Step 2.1: produce the answer message
+    produceHttpAnswerFromRequest(client->http_answer, client->http_request, server->cache);
+    printSubtitle("AFTER PRODUCE:\n\n");
+    printClient(client);
+
+    // Step 2.2: fill the answer message header buffer
+    int buffer_length = fillHttpAnswerHeaderBuffer(client->http_answer,
+                                                   client->answer_header_buffer,
+                                                   server->parameters->answer_header_buffer_size);
+    client->answer_header_buffer_length = buffer_length;
     client->answer_header_buffer_offset = 0;
 
     client->state = STATE_ANSWERING;
@@ -442,7 +453,7 @@ void processClientRequest (Server* server, Client* client)
 
 // Only write the HTTP header buffer on the socket
 // Returns true if the buffer has been entirely written, false otherwise
-bool writeHttpHeaderToClient (Server* server, Client* client)
+bool writeHttpHeaderToClient (Client* client)
 {
     // Write the header data on the socket
     printf("(HEAD) Writing up to %lu bytes to client %d...\n",
@@ -466,7 +477,7 @@ bool writeHttpHeaderToClient (Server* server, Client* client)
 
 // Only write the HTTP body on the socket (or nothing if the content is NULL)
 // Returns true if the buffer has been entirely written, false otherwise
-bool writeHttpContentToClient (Server* server, Client* client)
+bool writeHttpContentToClient (Client* client)
 {
     HttpContent* answer_content = client->http_answer->content;
 
@@ -474,7 +485,7 @@ bool writeHttpContentToClient (Server* server, Client* client)
     // In such a case, we assume the body has been written (by returning true)
     if (answer_content->body == NULL)
     {
-        printf("\nNO BODY WAS FOUND: NO CONTENT TO SEND...\n\n");
+        printf("\nNO BODY WAS FOUND: NO CONTENT TO SEND...\n");
         return true;
     }
     
@@ -500,14 +511,14 @@ bool writeHttpContentToClient (Server* server, Client* client)
 void writeToClient (Server* server, Client* client)
 {
     // In a first time, send the HTTP header data
-    bool header_is_sent = writeHttpHeaderToClient(server, client);
+    bool header_is_sent = writeHttpHeaderToClient(client);
 
     // In a second time, if the header has been sent, send the HTTP body data
     bool body_is_sent = false;
     if (header_is_sent)
     {
         printf("\nNOW SENDING BODY DATA :)!\n\n");
-        body_is_sent = writeHttpContentToClient(server, client);    
+        body_is_sent = writeHttpContentToClient(client);    
     }
 
     // If the whole HTTP answer has been sent (header + body),
@@ -568,13 +579,11 @@ void handleClientRequests (Server* server)
             switch (current_state)
             {
                 case STATE_WAITING_FOR_REQUEST:
-                printf("adding client fd %d for POLLIN\n", current_client->fd);
                     polled_sockets[nb_polled_sockets].fd     = current_client->fd;
                     polled_sockets[nb_polled_sockets].events = POLLIN;
                     break;
 
                 case STATE_ANSWERING:
-                 printf("adding client fd %d for POLLOUT\n", current_client->fd);
                     polled_sockets[nb_polled_sockets].fd     = current_client->fd;
                     polled_sockets[nb_polled_sockets].events = POLLOUT;
                     break;
@@ -617,9 +626,6 @@ void handleClientRequests (Server* server)
 
             current_state = current_client->state;
 
-            printf("revents (IN: %d, OUT: %d, HUP: %d): %d\n",
-                (int) POLLIN, (int) POLLOUT, (int) POLLHUP, polled_sockets[polled_sockets_index].revents);
-
             // Check if the client closed the socket (meaning it should be removed)
             if (POLLHUP & polled_sockets[polled_sockets_index].revents)
             {
@@ -635,7 +641,6 @@ void handleClientRequests (Server* server)
                         if (POLLIN & polled_sockets[polled_sockets_index].revents) {
                             readFromClient(server, current_client);
                         
-                            printf("POLLIN fd: %d\n", polled_sockets[polled_sockets_index].fd);
                             nb_handled_sockets++;
                         }
                         break;
@@ -644,7 +649,6 @@ void handleClientRequests (Server* server)
                         if (POLLOUT & polled_sockets[polled_sockets_index].revents) {
                             writeToClient(server, current_client);
                         
-                            printf("POLLOUT fd: %d\n", polled_sockets[polled_sockets_index].fd);
                             nb_handled_sockets++;
                         }
                         break;

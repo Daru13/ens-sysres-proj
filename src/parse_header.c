@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -21,7 +22,7 @@
 
 #define CHECK_SYNTAX {\
     if (end == NULL)\
-        return 400;\
+        return HTTP_400;\
 }
 
 // -----------------------------------------------------------------------------
@@ -46,12 +47,17 @@ typedef enum HttpHeaderField {
 
 // Arrays of options
 // Each different types of handled field should have its own array
-// Note, though, than differnet field may share the same set of accepted values
+// Note, though, than different field may share the same set of accepted values
 Option methodSwitch[] = {
-    { "GET",  HTTP_GET },
-    { "HEAD", HTTP_HEAD },
-    { "POST", HTTP_POST },
-    { NULL,   HTTP_UNKNOWN_METHOD }
+    { "GET",     HTTP_GET },
+    { "HEAD",    HTTP_HEAD },
+    { "POST",    HTTP_POST },
+    { "PUT",     HTTP_PUT },
+    { "DELETE",  HTTP_DELETE },
+    { "CONNECT", HTTP_CONNECT },
+    { "OPTIONS", HTTP_OPTIONS },
+    { "TRACE",   HTTP_TRACE },
+    { NULL,      HTTP_UNKNOWN_METHOD }
 };
 
 Option versionSwitch[] = {
@@ -108,22 +114,24 @@ OptionValue getOptionValueFromString (const Option opt[], char* str,
     }
 
     int optActu = 0;
-    for (; opt[optActu].key != NULL; optActu++)
+    for (; opt[optActu].key != NULL; optActu++) {
+        printf("'%s' =? '%s'\n", opt[optActu].key, str);
         if (strcmp(opt[optActu].key, str) == 0)
             return opt[optActu].value;
+    }
     return opt[optActu].value;
 }
 
 // I swear i'll put the buffer back in its state after i've dealt with it
-int fillHttpHeaderWith (HttpHeader* header, char* buffer)
+HttpCode fillHttpHeaderWith (HttpHeader* header, char* buffer)
 {
     char* pos = buffer;
-    char* end = strchr(pos, ' ');
+    char* end = strchr(pos, ' ') - 1;
     CHECK_SYNTAX
 
     header->method = getOptionValueFromString(methodSwitch, pos, true, end);
     
-    pos = end + 1;
+    pos = end + 2;
     end = strchr(pos, ' ');
     CHECK_SYNTAX
     
@@ -167,7 +175,7 @@ int fillHttpHeaderWith (HttpHeader* header, char* buffer)
     }
     
     pos = end + 1;
-    end = strchr(pos, '\n');
+    end = strchr(pos, '\r') - 1;
     CHECK_SYNTAX
     
     header->version = getOptionValueFromString(versionSwitch, pos, true, end);
@@ -177,15 +185,15 @@ int fillHttpHeaderWith (HttpHeader* header, char* buffer)
         {
             case HTTP_V1_0:
             case HTTP_V2_0:
-                return 505;
+                return HTTP_505;
             default:
                 // Probably syntax error
                 // TODO : check if it's not just a version we don't implement and don't have heard from, which SHOULD be a 505 error.
-                return 400;
+                return HTTP_400;
         }
     }
 
-    pos = end+1;
+    pos = end + 2;
 
     // NOW we should be at the start of the header fields.
     while (*pos != '\n')
@@ -193,12 +201,14 @@ int fillHttpHeaderWith (HttpHeader* header, char* buffer)
         char* fieldName = pos;
         end = strchr(pos, ':');
         CHECK_SYNTAX
+        printf("\n>>>>1\n");
         char* endName = end; 
         char* fieldValue = endName+1;
         while (*fieldValue == ' ' || *fieldValue == '\t')
             fieldValue++;
         end = strchr(fieldValue, '\n');
         CHECK_SYNTAX
+        printf("\n>>>>2\n");
         char* endValue = end - 1; 
         while (*endValue == ' ' || *endValue == '\t')
             endValue--;
@@ -210,8 +220,9 @@ int fillHttpHeaderWith (HttpHeader* header, char* buffer)
         switch (headerField)
         {
             case HEAD_HOST:
+            
                 if (header->host)
-                    return 400;
+                    free(header->host);
 
                 header->host = malloc((lenValue+1) * sizeof(char));
                 if (header->host == NULL)
@@ -227,7 +238,7 @@ int fillHttpHeaderWith (HttpHeader* header, char* buffer)
                     int lenInit = strlen(header->accept);
                     char* new = realloc(header->accept, (lenInit+1+lenValue+1) * sizeof(char));
                     if (new == NULL)
-                        return 500; // ???
+                        handleErrorAndExit("realloc() failed in fillHttpHeaderWith()");
 
                     header->accept = new;
                     header->accept[lenInit] = ',';
@@ -242,5 +253,5 @@ int fillHttpHeaderWith (HttpHeader* header, char* buffer)
         }
     }
 
-    return 200;
+    return HTTP_200;
 }

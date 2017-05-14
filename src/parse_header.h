@@ -3,6 +3,6 @@
 
 #include "http.h"
 
-int fillHttpHeaderWith (HttpHeader* header, char* buffer);
+HttpCode fillHttpHeaderWith (HttpHeader* header, char* buffer);
 
 #endif

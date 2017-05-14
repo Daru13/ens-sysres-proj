@@ -129,43 +129,15 @@ void initAnswerHttpMessage (HttpMessage* message,
 }
 
 // -----------------------------------------------------------------------------
-// HTTP REQUEST PARSING AND ANSWERING
-// -----------------------------------------------------------------------------
-
-// Parse a HTTP request from a buffer, and set the various fields of the given HttpMessage
-void parseHttpRequest (HttpMessage* request, char* buffer)
-{
-    int http_code = fillHttpHeaderWith(request->header, buffer);
-    // TODO: handle body data
-}
-
-// Produce an HTTP answer from a parsed request
-void produceHttpAnswerFromRequest (HttpMessage* answer, HttpMessage* request)
-{
-
-}
-
-// -----------------------------------------------------------------------------
-// HTTP CODES-RELATED FUNCTIONS
+// HTTP SPECIAL TYPES-RELATED FUNCTIONS
 // -----------------------------------------------------------------------------
 
 // Currently assigning the code value in the enum
-// A warning is displayed if the code is HTTP_NO_CODE (-1 returned)
 int getHttpCodeValue (const HttpCode http_code)
 {
-    switch (http_code)
-    {
-        case HTTP_NO_CODE:
-            printWarning("Warning: trying to retrieve the value of a HTTP_NO_CODE code!");
-            return -1;
-
-        // In any other case, simply return the value of the code
-        default:
-            return (int) http_code;
-    }
+    return (int) http_code;
 }
 
-// A warning is displayed if the code is HTTP_NO_CODE ("Unknwon HTTP code" returned)
 char* getHttpCodeDescription (const HttpCode http_code)
 {
     switch (http_code)
@@ -193,10 +165,39 @@ char* getHttpCodeDescription (const HttpCode http_code)
         case HTTP_505:
             return "HTTP version not supported";
 
-        case HTTP_NO_CODE:
         default:
-            printWarning("Warning: trying to retrieve the description of a HTTP_NO_CODE code!");
-            return "Unknown HTTP code";
+        case HTTP_NO_CODE:
+            return "No HTTP code";
+    }
+}
+
+char* getHttpMethodAsString (const HttpMethod http_method)
+{
+    switch (http_method)
+    {
+        case HTTP_GET:
+            return "HTTP_GET";
+        case HTTP_HEAD:
+            return "HTTP_HEAD";
+        case HTTP_POST:
+            return "HTTP_POST";
+        case HTTP_PUT:
+            return "HTTP_PUT";
+        case HTTP_DELETE:
+            return "HTTP_DELETE";
+        case HTTP_CONNECT:
+            return "HTTP_CONNECT";
+        case HTTP_OPTIONS:
+            return "HTTP_OPTIONS";
+        case HTTP_TRACE:
+            return "HTTP_TRACE";
+
+        case HTTP_UNKNOWN_METHOD:
+            return "HTTP_UNKNOWN_METHOD";
+
+        default:
+        case HTTP_NO_METHOD:
+            return "No HTTP method";
     }
 }
 
@@ -244,9 +245,9 @@ void prepareHttpError (HttpMessage* answer, HttpCode http_code)
 }
 
 // Set fields required for a (generic) HTTP valid answer
-void prepareHttpValidAnswer (HttpMessage* answer, HttpCode http_code, File* file)
+void prepareHttpValidAnswer (HttpMessage* request, HttpMessage* answer, File* file)
 {
-    prepareGeneralHttpAnswer(answer, http_code);
+    prepareGeneralHttpAnswer(answer, HTTP_200);
 
     // Set header fields
     answer->header->content_length   = file->size;
@@ -255,9 +256,88 @@ void prepareHttpValidAnswer (HttpMessage* answer, HttpCode http_code, File* file
                                      ? "gzip"
                                      : "identity";
 
-    // Set body fields
-    answer->content->length = file->size;
-    answer->content->body   = file->content;
+    // Set body fields (HEAD requests expect no body)
+    // Curently, only GET and HEAD are supported
+    if (request->header->method == HTTP_GET)
+    {
+        answer->content->length = file->size;
+        answer->content->body   = file->content;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// HTTP REQUEST PARSING AND ANSWERING
+// -----------------------------------------------------------------------------
+
+// Parse a HTTP request from a buffer, and set the various fields of the given HttpMessage
+// Return the HTTP code of the answer to produce
+HttpCode parseHttpRequest (HttpMessage* request, char* buffer)
+{
+    // Clear the request message structure
+    initRequestHttpMessage(request);
+
+    int http_code = fillHttpHeaderWith(request->header, buffer);
+    // TODO: handle body data
+
+    return http_code;
+}
+
+// Produce a HTTP answer from a parsed request
+void produceHttpAnswerFromRequest (HttpMessage* answer, HttpMessage* request, FileCache* cache)
+{
+    // TODO: use a better semantic for request parsing errors
+
+    // If there has been an error while parsing the request, produce an error message
+    if (request->header->code != HTTP_200)
+    {
+        prepareHttpError(answer, request->header->code);
+        return;
+    }
+
+    // If the HTTP version is 1.0 or 2.0, it is not supported by the server
+    // Thus, in such a case, answer with an error 505
+    if (request->header->version != HTTP_V1_1)
+    {
+        prepareHttpError(answer, HTTP_505);
+        return;
+    }
+
+    // If the method is unknown, answer with an error 400
+    if (request->header->method == HTTP_UNKNOWN_METHOD)
+    {
+        prepareHttpError(answer, HTTP_400);
+        return;
+    }
+
+    // If the method is neither GET nor HEAD, it is not implemented (yet)
+    // Thus, in such a case, answer with an error 501
+    if (request->header->method != HTTP_GET
+    &&  request->header->method != HTTP_HEAD)
+    {
+        prepareHttpError(answer, HTTP_501);
+        return;
+    }
+
+    // If the specified path is not the standard one, answer with an error 400
+    if (request->header->requestType != HTTP_ORIGIN_FORM)
+    {
+        prepareHttpError(answer, HTTP_400);
+        return;
+    }
+
+    // Otherwise, try to fetch the requested file
+    File* requested_file = findFileInCache(cache, request->header->requestTarget);
+
+    // If the file is not found, answer with an error 404
+    if (requested_file == NOT_FOUND)
+    {
+        prepareHttpError(answer, HTTP_404);
+        return;
+    }
+
+    // If it is found, correctly answer with a 200 code
+    printf("CORRECT REQUEST\n");
+    prepareHttpValidAnswer(request, answer, requested_file);
 }
 
 // -----------------------------------------------------------------------------
@@ -328,12 +408,3 @@ int fillHttpAnswerHeaderBuffer (HttpMessage* answer,
 
     return nb_bytes_written;
 }
-
-/*
-// Return true if the file was found, false otherwise
-bool fillHttpAnswerBody (HttpMessage* answer)
-{
-    // Fetch the requested file
-    File* requested_file = findFileInCache(cache, path);
-}
-*/

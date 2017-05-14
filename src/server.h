@@ -12,7 +12,6 @@
 typedef enum ClientState {
     STATE_WAITING_FOR_REQUEST,
     STATE_PROCESSING_REQUEST,
-    /*STATE_PRODUCING_ANWSER,*/
     STATE_ANSWERING
 } ClientState;
 
@@ -116,8 +115,8 @@ Client* acceptNewClient (Server* server);
 
 void readFromClient (Server* server, Client* client);
 void processClientRequest (Server* server, Client* client);
-bool writeHttpHeaderToClient (Server* server, Client* client);
-bool writeHttpContentToClient (Server* server, Client* client);
+bool writeHttpHeaderToClient (Client* client);
+bool writeHttpContentToClient (Client* client);
 void writeToClient (Server* server, Client* client);
 
 void handleClientRequests (Server* server);

@@ -14,14 +14,18 @@ typedef enum HttpVersion {
 typedef enum HttpMethod {
     HTTP_GET,
     HTTP_HEAD,
-    HTTP_POST,
-
-    // TODO: add more methods :)!
+    HTTP_POST,    // Not supported
+    HTTP_PUT,     // Not supported
+    HTTP_DELETE,  // Not supported
+    HTTP_CONNECT, // Not supported
+    HTTP_OPTIONS, // Not supported
+    HTTP_TRACE,   // Not supported
 
     HTTP_UNKNOWN_METHOD, // Unknown when parsing
     HTTP_NO_METHOD       // No method needed (i.e. outgoing message)
 } HttpMethod;
 
+// Note: there are many more methods, but we are not supporting them yet
 typedef enum HttpCode {
     HTTP_200 = 200, // OK
     HTTP_400 = 400, // Bad request
@@ -35,7 +39,7 @@ typedef enum HttpCode {
     HTTP_503 = 503, // Service unavailable
     HTTP_505 = 505, // HTTP version not supported
 
-    HTTP_NO_CODE // No code needed (i.e. incomming message)
+    HTTP_NO_CODE = -1 // No code needed (i.e. incomming message)
 } HttpCode;
 
 typedef enum HttpRequestType {
@@ -103,8 +107,25 @@ void initRequestHttpMessage (HttpMessage* message);
 void initAnswerHttpMessage (HttpMessage* message,
                             const HttpVersion version, const HttpCode code);
 
-void parseHttpRequest (HttpMessage* request, char* buffer);
-void produceHttpAnswer (HttpMessage* request, HttpMessage* answer, const FileCache* cache,
-                        char* answer_header_buffer, int* answer_header_buffer_length);
+int getHttpCodeValue (const HttpCode http_code);
+char* getHttpCodeDescription (const HttpCode http_code);
+char* getHttpMethodAsString (const HttpMethod http_method);
+
+char* getHttpServerDate ();
+
+void prepareGeneralHttpAnswer (HttpMessage* answer, HttpCode http_code);
+void prepareHttpError (HttpMessage* answer, HttpCode http_code);
+void prepareHttpValidAnswer (HttpMessage* request, HttpMessage* answer, File* file);
+
+HttpCode parseHttpRequest (HttpMessage* request, char* buffer);
+void produceHttpAnswerFromRequest (HttpMessage* answer, HttpMessage* request, FileCache* cache);
+
+
+int writeHttpAnswerFirstLine (const HttpHeader* answer_header,
+                              char* answer_header_buffer, const int buffer_max_length);
+int writeHttpOptionFields (const HttpHeader* answer_header,
+                           char* answer_header_buffer, const int buffer_max_length);
+int fillHttpAnswerHeaderBuffer (HttpMessage* answer,
+                                char* answer_header_buffer, const int buffer_max_length);
 
 #endif
