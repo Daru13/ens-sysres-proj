@@ -20,7 +20,7 @@ build/server.o: src/server.c src/server.h src/http.h src/file_cache.h src/toolbo
 
 src/server.h: src/http.h
 
-build/parse_header.o: src/parse_header.c src/parse_header.h src/http.h src/toolbox.h
+build/parse_header.o: src/parse_header.c src/parse_header.h src/http.h src/http.h src/toolbox.h
 	$(CC) $(CCFLAGS) -c src/parse_header.c -o build/parse_header.o
 
 src/parse_header.h: src/http.h
