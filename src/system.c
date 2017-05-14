@@ -22,11 +22,11 @@ int runReadableProcess (char* command, char* execvp_argv[],
     pid_t pipe_fds[2];
     int return_value = pipe(pipe_fds);
     if (return_value < 0)
-        handleErrorAndExit("pipe() failed in runReadableBackgroundProcess()");
+        handleErrorAndExit("pipe() failed in runReadableProcess()");
 
     pid_t fork_pid = fork();
     if (fork_pid < 0)
-        handleErrorAndExit("fork() failed in runReadableBackgroundProcess()");
+        handleErrorAndExit("fork() failed in runReadableProcess()");
 
     // Child process
     if (fork_pid == 0)
@@ -34,20 +34,20 @@ int runReadableProcess (char* command, char* execvp_argv[],
         // Program must output in its parent's pipe output
         return_value = close(pipe_fds[PIPE_OUT]);
         if (return_value < 0)
-            handleErrorAndExit("close() failed in runReadableBackgroundProcess()");
+            handleErrorAndExit("close() failed in runReadableProcess()");
 
         return_value = dup2(pipe_fds[PIPE_IN], 1);
         if (return_value < 0)
-            handleErrorAndExit("close() failed in runReadableBackgroundProcess()");        
+            handleErrorAndExit("close() failed in runReadableProcess()");        
 
         execvp(command, execvp_argv);
-        handleErrorAndExit("exec() failed in runReadableBackgroundProcess()");
+        handleErrorAndExit("exec() failed in runReadableProcess()");
     }
 
     // Father process
     return_value = close(pipe_fds[PIPE_IN]);
     if (return_value < 0)
-        handleErrorAndExit("close() failed in runReadableBackgroundProcess()");
+        handleErrorAndExit("close() failed in runReadableProcess()");
 
     // TODO: clean this part
     int nb_bytes_read = 0;
@@ -64,15 +64,15 @@ int runReadableProcess (char* command, char* execvp_argv[],
     }
 
     if (nb_bytes_read < 0)
-        handleErrorAndExit("read() failed in runReadableBackgroundProcess()");
+        handleErrorAndExit("read() failed in runReadableProcess()");
 
     return_value = close(pipe_fds[PIPE_OUT]);
     if (return_value < 0)
-        handleErrorAndExit("close() failed in runReadableBackgroundProcess()");
+        handleErrorAndExit("close() failed in runReadableProcess()");
 
     return_value = waitpid(fork_pid, NULL, 0);
     if (return_value < 0)
-        handleErrorAndExit("wait() failed in runReadableBackgroundProcess()");
+        handleErrorAndExit("wait() failed in runReadableProcess()");
 
     return nb_bytes_read;
 }

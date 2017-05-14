@@ -434,8 +434,7 @@ void processClientRequest (Server* server, Client* client)
     // Step 2: produce the answer
     // TODO: what about the default HTTP code?
     initAnswerHttpMessage(client->http_answer, HTTP_V1_1, HTTP_400);
-    produceHttpAnswer(client->http_request, client->http_answer, server->cache,
-                     client->answer_header_buffer, &(client->answer_header_buffer_length));
+    
     client->answer_header_buffer_offset = 0;
 
     client->state = STATE_ANSWERING;
@@ -465,7 +464,7 @@ bool writeHttpHeaderToClient (Server* server, Client* client)
         == client->answer_header_buffer_length;
 }
 
-// Only write the HTTP header buffer on the socket
+// Only write the HTTP body on the socket (or nothing if the content is NULL)
 // Returns true if the buffer has been entirely written, false otherwise
 bool writeHttpContentToClient (Server* server, Client* client)
 {
@@ -497,6 +496,7 @@ bool writeHttpContentToClient (Server* server, Client* client)
     return answer_content->offset == answer_content->length;
 }
 
+// This function assumes the answer message is correctly filled
 void writeToClient (Server* server, Client* client)
 {
     // In a first time, send the HTTP header data

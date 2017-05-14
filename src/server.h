@@ -40,7 +40,7 @@ typedef struct Client {
     int   answer_header_buffer_offset;
 
     // Related HTTP answer 
-    // Note: it contained pointer to the body data to send
+    // Note: it contains a pointer to the body data to send
     HttpMessage* http_answer;
 } Client;
 
@@ -76,7 +76,7 @@ typedef struct Server {
 #define SERV_DEFAULT_QUEUE_MAX_LENGTH    5
 #define SERV_DEFAULT_MAX_NB_CLIENTS      64 
 #define SERV_DEFAULT_REQUEST_BUF_SIZE    16384 // bytes
-#define SERV_DEFAULT_ANS_HEADER_BUF_SIZE 8192  // bytes
+#define SERV_DEFAULT_ANS_HEADER_BUF_SIZE 2048  // bytes
 
 #define SERV_DEFAULT_ROOT_DATA_DIR    "./www"
 
