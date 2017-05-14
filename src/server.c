@@ -433,13 +433,9 @@ void processClientRequest (Server* server, Client* client)
     // Step 1: analyze the request
     HttpCode http_code = parseHttpRequest(client->http_request, client->request_buffer);
     client->http_request->header->code = http_code;
-    printSubtitle("AFTER PARSING:\n\n");
-    printClient(client);
 
     // Step 2.1: produce the answer message
     produceHttpAnswerFromRequest(client->http_answer, client->http_request, server->cache);
-    printSubtitle("AFTER PRODUCE:\n\n");
-    printClient(client);
 
     // Step 2.2: fill the answer message header buffer
     int buffer_length = fillHttpAnswerHeaderBuffer(client->http_answer,
@@ -485,7 +481,7 @@ bool writeHttpContentToClient (Client* client)
     // In such a case, we assume the body has been written (by returning true)
     if (answer_content->body == NULL)
     {
-        printf("\nNO BODY WAS FOUND: NO CONTENT TO SEND...\n");
+        // printf("\nNO BODY WAS FOUND: NO CONTENT TO SEND...\n");
         return true;
     }
     

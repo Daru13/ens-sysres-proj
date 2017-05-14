@@ -114,8 +114,8 @@ OptionValue getOptionValueFromString (const Option opt[], char* str,
     }
 
     int optActu = 0;
-    for (; opt[optActu].key != NULL; optActu++) {
-        printf("'%s' =? '%s'\n", opt[optActu].key, str);
+    for (; opt[optActu].key != NULL; optActu++)
+    {
         if (strcmp(opt[optActu].key, str) == 0)
             return opt[optActu].value;
     }

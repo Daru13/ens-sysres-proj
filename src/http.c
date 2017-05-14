@@ -336,7 +336,6 @@ void produceHttpAnswerFromRequest (HttpMessage* answer, HttpMessage* request, Fi
     }
 
     // If it is found, correctly answer with a 200 code
-    printf("CORRECT REQUEST\n");
     prepareHttpValidAnswer(request, answer, requested_file);
 }
 
