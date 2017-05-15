@@ -6,6 +6,7 @@
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <fcntl.h>
 #include "toolbox.h"
 #include "system.h"
 #include "file_cache.h"
@@ -26,17 +27,18 @@ File* createFile ()
 void initFile (File* file)
 {
     file->name    = NULL;
+    file->path    = NULL;
     file->state   = STATE_NOT_LOADED;
     file->content = NULL;
     file->size    = 0;
+
+    file->must_unload = false;
 
     file->type = malloc(MAX_FILE_TYPE_LENGTH * sizeof(char));
     if (file->type == NULL)
         handleErrorAndExit("malloc() failed in initFile()");
 
-    file->encoding = malloc(MAX_FILE_ENCODING_LENGTH * sizeof(char));
-    if (file->encoding == NULL)
-        handleErrorAndExit("malloc() failed in initFile()");
+    file->encoding = ENCODING_NONE;
 }
 
 File* createAndInitFile ()
@@ -52,7 +54,6 @@ void deleteFile (File* file)
     free(file->name);
     free(file->content);
     free(file->type);
-    free(file->encoding);
 
     free(file);
 }
@@ -80,10 +81,23 @@ void printFile (const File* file, const int indent)
         indent_space[i] = ' ';
     indent_space[indent] = '\0';
 
-    printf("%s%s (%sstate:%s %s, %ssize:%s %d, %stype:%s %s)\n",
+    // Use the right unit (b, kB, MB) for a cleaner file size
+    float printed_file_size = file->size > 1000
+                            ? file->size > 1000000
+                              ? (float) file->size / 1000000
+                              : (float) file->size / 1000
+                            : (float) file->size;
+
+    char* file_size_unit = file->size > 1000
+                         ? file->size > 1000000
+                           ? "MB"
+                           : "kB"
+                         : "b";
+
+    printf("%s%s (%sstate:%s %s, %ssize:%s %.1f%s, %stype:%s %s)\n",
            indent_space, file->name,
            COLOR_BOLD, COLOR_RESET, getFileStateAsString(file->state),
-           COLOR_BOLD, COLOR_RESET, file->size,
+           COLOR_BOLD, COLOR_RESET, printed_file_size, file_size_unit,
            COLOR_BOLD, COLOR_RESET, file->type);
 }
 
@@ -200,57 +214,51 @@ FileCache* createFileCache ()
     return new_cache;
 }
 
-// Fails, print a warning and returns false if root folder is larger than allowed max_size
-bool initFileCache (FileCache* cache, Folder* root, const int max_size)
+void initEmptyFileCache (FileCache* cache, const int max_size)
 {
-    if (root->size > max_size)
-    {
-        printWarning("cache could not be initialized: root folder is too large");
-        return false;
-    }
-
-    cache->root     = root;
-    cache->size     = root->size;
+    cache->root     = NULL;
+    cache->size     = 0;
     cache->max_size = max_size;
-
-    return true;
 }
 
-/*
-FileCache* createAndInitFileCache (const char* name, const char* content, const int length)
+FileCache* createEmptyFileCache (const int max_size)
 {
-    FileCache* new_file = createFileCache();
-    initFileCache(new_file, name, content, length);
+    FileCache* new_cache = createFileCache();
+    initEmptyFileCache(new_cache, max_size);
 
-    return new_file;
+    return new_cache;
 }
-*/
 
 // Warning: all the file and folder structures of root folder are deleted as well!
 void deleteFileCache (FileCache* cache)
 {
-    recursivelyDeleteFolder(cache->root);
+    if (cache->root != NULL)
+        recursivelyDeleteFolder(cache->root);
     free(cache);
 }
 
 void printFileCache (const FileCache* cache)
 {
+    printSubtitle("________________ FILE CACHE ________________");
+    printf("\nUsed memory: %.2f/%.2f kb (%3.1f%%)\n\n",
+           ((float) cache->size) / 1000, ((float) cache->max_size) / 1000,
+           (((float) cache->size) / ((float) cache->max_size)) * 100.0);
     recursivelyPrintFolder(cache->root, 0);
 }
 
 // -----------------------------------------------------------------------------
-// CACHE BUILDING
+// OPERATIONS ON FILE [CONTENT]
 // -----------------------------------------------------------------------------
 
 // By using standard program "file", guess the type and encoding of a file
-void setFileType (File* file, char* path)
+void setFileType (File* file)
 {
     char* command = "file";
     char* execvp_argv[] = {
-            "file",   // Command name (as argv[0])
-            "--mime", // Output "[MIME type]; [MIME encoding]"
-            "-0b",    // Do not prepend filename
-            path,     // Path to the file
+            "file",     // Command name (as argv[0])
+            "--mime",   // Output "[MIME type]; [MIME encoding]"
+            "-0b",      // Do not prepend filename
+            file->path, // Path to the file
             NULL
     };
 
@@ -261,57 +269,149 @@ void setFileType (File* file, char* path)
     // If less than two bytes have been read, print a warning a leave the string empty
     if (filetype_length < 2)
     {
-        printWarning("unable to read a valid filetype of %s", path);
-        file->type[0] = '\0';
+        printWarning("Warning: unable to read a valid filetype of %s", file->path);
+        
+        free(file->type);
+        file->type = NULL;
     }
     else
         file->type[filetype_length - 1] = '\0';
 }
 
+
+// File path and size must be set before calling this function!
+void setRawFileContent (File* file)
+{
+    // Buffer where to store the file data
+    file->content = malloc(file->size * sizeof(char));
+    if (file->content == NULL)
+        handleErrorAndExit("malloc() failed in setRawFileContent()");
+
+    // Get the file content from the disk
+    int file_fd = open(file->path, O_RDONLY);
+    if (file_fd < 0)
+        handleErrorAndExit("open() failed in setRawFileContent()");
+
+    int nb_bytes_read = 0;
+    while (nb_bytes_read < file->size)
+    {
+        nb_bytes_read += read(file_fd, file->content, file->size - nb_bytes_read);
+        if (nb_bytes_read < 0)
+            handleErrorAndExit("read() failed in setRawFileContent()");
+    }
+
+    int return_value = close(file_fd);
+    if (return_value < 0)
+        handleErrorAndExit("close() failed in setRawFileContent()");
+
+    // Update the file state and encoding
+    file->state    = STATE_LOADED_RAW;
+    file->encoding = ENCODING_NONE;
+}
+
 // By using standard program "gzip", compress the file
-// Note: it assumes the normal file size is set in the structure!
-void compressFile (File* file, char* path)
+// File path and size must be set before calling this function!
+void setCompressedFileContent (File* file)
 {
     char* command = "gzip";
     char* execvp_argv[] = {
             "gzip",     // Command name (as argv[0])
             "--stdout", // Output compressed data on stdout
-            path,       // Path to the file
+            file->path, // Path to the file
             NULL
     };
 
-    // Buffer where to store compressed data
-    // It is made larger than the normal file size,
+    // Buffer where to store compressed data, made larger than the normal file size,
     // in case the compressed data is bigger than the raw one
-    // (magic heuristic here - may be improved!)
-    file->content = malloc((int) 1.2 * file->size * sizeof(char));
+    // (TODO: magic 1.2 heuristic here, which should be improved!)
+    int compression_buffer_length = (int) 1.2 * file->size;
+    file->content = malloc(compression_buffer_length * sizeof(char));
+    if (file->content == NULL)
+        handleErrorAndExit("malloc() failed in setCompressedFileContent()");
 
+    // get the compressed file content from 'gzip' output
     int compressed_data_length = runReadableProcess(command, execvp_argv,
-                                                    file->content, (int) 1.2 * file->size);
+                                                    file->content, compression_buffer_length);
     
-    // Re-demension the allocated buffer to fit the actual compressed data size
+    // Re-dimension the allocated buffer to fit the actual compressed data size
     file->content = realloc(file->content, compressed_data_length);
     file->size    = compressed_data_length;
 
-    // Update the file state
-    file->state = STATE_LOADED_COMPRESSED;
+    // Update the file state and encoding
+    file->state    = STATE_LOADED_COMPRESSED;
+    file->encoding = ENCODING_GZIP;
 }
 
-// TODO: split this in smaller functions
-Folder* recursivelyBuildFolderFromDisk (char* path)
+// Unload the content of a file
+// Warnings are displayed in following cases:
+// - if the file is in STATE_NOT_LOADED mode (does nothing)
+// - if the content is NULL (does nothing)
+void removeFileContent (File* file)
 {
-    DIR* directory = opendir(path);
-    if (directory == NULL)
-        handleErrorAndExit("opendir() failed in recursivelyBuildFolderFromDisk()");
+    if (file->state == STATE_NOT_LOADED)
+    {
+        printWarning("Warning: attempt to remove the content of a file in STATE_NOT_LOADED mode!");
+        return;
+    }
 
-    // Read the directory a first time, to count how many
-    // folders and regular files are there inside
-    int   nb_files      = 0;
-    int   nb_subfolders = 0;
-    char* current_path  = malloc(MAX_PATH_LENGTH * sizeof(char));
-    if (current_path == NULL)
-        handleErrorAndExit("malloc() failed in recursivelyBuildFolderFromDisk()");
+    if (file->content == NULL)
+    {
+        printWarning("Warning: attempt to remove the content of a file whose content is NULL");
+        return;
+    }
+
+    free(file->content);
+    file->size  = 0;
+    file->state = STATE_NOT_LOADED;
+}
+
+// Set the file content, which can either be compressed or raw
+// File path and size must be set before calling this function!
+// If the file is too large to be cached, print a warning and return false
+// Otherwise, return true
+bool setFileContent (File* file, const int cache_free_space)
+{
+    // If the file size is too large, do not load it (and return false)
+    if (file->size > cache_free_space)
+    {
+        printWarning("Note: file %s is too large to be cached!", file->path);
+        return false;
+    }
+
+    // Otherwise, either load the raw content or the compressed one (and return true)
+    if (file->size < MIN_FILE_SIZE_FOR_GZIP)
+        setRawFileContent(file);
+    else
+        setCompressedFileContent(file);
+
+    return true;
+}
+
+// Compute and set the required file metadata
+void setFileMetadata (File* file)
+{
+    setFileType(file);
+}
+
+// -----------------------------------------------------------------------------
+// CACHE BUILDING
+// -----------------------------------------------------------------------------
+
+// Return true if the file is "." (current) or ".." (parent)
+bool filenameIsSpecial (const char* filename)
+{
+    return stringsAreEqual(filename,  ".")
+        || stringsAreEqual(filename, ".."); 
+}
+
+// This function assumes directory is rewinded (otherwise, some elements may be ignored)
+void countFilesAndFoldersInDirectory (DIR* directory, const char* current_folder_path,
+                                      int* nb_files, int* nb_subfolders)
+{
     struct stat file_info;
+    char*       current_entry_path = malloc(MAX_PATH_LENGTH * sizeof(char));
+    if (current_entry_path == NULL)
+        handleErrorAndExit("malloc() failed in recursivelyFillFolder()");;
 
     struct dirent* current_entry = readdir(directory);
     while (current_entry != NULL)
@@ -319,8 +419,7 @@ Folder* recursivelyBuildFolderFromDisk (char* path)
         char* current_entry_name = current_entry->d_name;
 
         // Ignore special directories "." (current) and ".." (parent)
-        if ((! strcmp(current_entry_name,  "."))
-        ||  (! strcmp(current_entry_name, "..")))
+        if (filenameIsSpecial(current_entry_name))
         {
             // Immediately move to the next entry
             current_entry = readdir(directory);
@@ -328,45 +427,49 @@ Folder* recursivelyBuildFolderFromDisk (char* path)
         }
 
         // Build the path to the current entry
-        current_path = strcpy(current_path, path);
-        current_path = strcat(current_path, "/");
-        current_path = strcat(current_path, current_entry_name);
+        current_entry_path  = strcpy(current_entry_path, current_folder_path);
+        bool path_was_built = appendNameToPath(current_entry_path, current_entry_name, MAX_PATH_LENGTH);
+
+        // If the path is too long (not handled for now), consider it a (fatal) error
+        if (! path_was_built)
+            handleErrorAndExit("appendNameToPath() failed in recursivelyFillFolder(): path is too long!");
 
         // Get info on the current entry
-        int return_value = stat(current_path, &file_info);
+        int return_value = stat(current_entry_path, &file_info);
         if (return_value < 0)
-            handleErrorAndExit("stat() failed in recursivelyBuildFolderFromDisk()");
-/*
-        printf("Current entry: %s (DIR: %s)\n", current_entry_name,
-               (S_ISDIR(file_info.st_mode) ? "true" : "false"));
-        printf("Current path: %s\n", current_path);
-*/
+            handleErrorAndExit("stat() failed in countFilesAndFoldersInDirectory()");
+
         // Check which kind of file the current entry is, 
         // and update counters accordingly
         if (S_ISREG(file_info.st_mode))
-            nb_files++;
+            (*nb_files)++;
         else if (S_ISDIR(file_info.st_mode))
-            nb_subfolders++;
+            (*nb_subfolders)++;
 
         // Move to the next entry
         current_entry = readdir(directory);
     }
 
-    // Create an actual Folder structure, and fill it recursively
-    printf("Creating new folder with %d file(s) and %d subfolder(s)...\n",
-           nb_files, nb_subfolders);
-    char* new_folder_name = extractDirectoryNameFromPath(path);
-    Folder* new_folder = createEmptyFolder(new_folder_name, nb_files, nb_subfolders);
-    
-    rewinddir(directory);
-    current_entry = readdir(directory);
+    free(current_entry_path);
+}
+
+// Fill a Folder structure according tot a DIR one, at current_path
+// If there is no more space in the cache, file content is not loaded
+void recursivelyFillFolder (DIR* directory, Folder* folder, const char* current_folder_path,
+                            int* cache_free_space)
+{
+    struct stat file_info;
+    char*       current_entry_path = malloc(MAX_PATH_LENGTH * sizeof(char));
+    if (current_entry_path == NULL)
+        handleErrorAndExit("malloc() failed in recursivelyFillFolder()");
+
+    struct dirent* current_entry = readdir(directory);
     while (current_entry != NULL)
     {
         char* current_entry_name = current_entry->d_name;
 
-        // Ignore special directories "." (current) and ".." (parent)
-        if ((! strcmp(current_entry_name,  "."))
-        ||  (! strcmp(current_entry_name, "..")))
+        // Ignore special directories
+        if (filenameIsSpecial(current_entry_name))
         {
             // Immediately move to the next entry
             current_entry = readdir(directory);
@@ -374,91 +477,111 @@ Folder* recursivelyBuildFolderFromDisk (char* path)
         }
 
         // Build the path to the current entry
-        current_path = strcpy(current_path, path);
-        current_path = strcat(current_path, "/");
-        current_path = strcat(current_path, current_entry_name);
+        current_entry_path  = strcpy(current_entry_path, current_folder_path);
+        bool path_was_built = appendNameToPath(current_entry_path, current_entry_name, MAX_PATH_LENGTH);
+
+        // If the path is too long (not handled for now), consider it a (fatal) error
+        if (! path_was_built)
+            handleErrorAndExit("appendNameToPath() failed in recursivelyFillFolder(): path is too long!");
 
         // Get info on the current entry
-        int return_value = stat(current_path, &file_info);
+        int return_value = stat(current_entry_path, &file_info);
         if (return_value < 0)
-            handleErrorAndExit("stat() failed in recursivelyBuildFolderFromDisk()");
+            handleErrorAndExit("stat() failed in recursivelyBuildFolder()");
 
-        // If the current entry is a regular file, open it, copy all its content in
-        // a newly created File structure's buffer, and close it
+        // Case 1: current entry is a regular file
         if (S_ISREG(file_info.st_mode))
         {
-            // TODO: check stuff here (bad return values, etc)
-            char* current_file_name = malloc(strlen(current_entry_name) * sizeof(char));
-            if (current_file_name == NULL)
-                handleErrorAndExit("malloc() failed in recursivelyBuildFolderFromDisk()");
-            current_file_name = strcpy(current_file_name, current_entry_name);
-            int   current_file_size = file_info.st_size;
+            // Create and initialize a File structure
+            // printf("Creating file with name %s...\n", current_entry_name);
+            File* new_file = createAndInitFile();
 
+            new_file->name = getFreshStringCopy(current_entry_name);
+            new_file->path = getFreshStringCopy(current_entry_path);
+            new_file->size = file_info.st_size;
 
+            // File (content) must only be unloaded (after reading) if the cache is full
+            new_file->must_unload = false;
 
-            // TODO: clean/explain
-
-            // Create a File structure, and add it to the current folder
-            printf("Creating file with name %s...\n", current_entry_name);
-            File* new_file_node = createAndInitFile();
-
-            new_file_node->name = current_file_name;
-            new_file_node->size = current_file_size;
-
-            if (current_file_size < MIN_FILE_SIZE_FOR_GZIP)
-            {
-                char* current_file_content = malloc(current_file_size * sizeof(char));
-                if (current_file_content == NULL)
-                    handleErrorAndExit("malloc() failed in recursivelyBuildFolderFromDisk()");
-
-                FILE* current_file = fopen(current_path, "r");
-                int nb_bytes_read = fread(current_file_content, sizeof(char),
-                                          current_file_size, current_file);
-                fclose(current_file);
-
-                new_file_node->content = current_file_content;
-                new_file_node->state   = STATE_LOADED_RAW;
-            }
+            // Attempt to load the file content, and update values accordingly
+            bool content_was_loaded = setFileContent(new_file, *cache_free_space);
+            if (content_was_loaded)
+                *cache_free_space -= new_file->size;
             else
-            {
-                compressFile(new_file_node, current_path);
-            }
+                new_file->must_unload = true;
 
-            setFileType(new_file_node, current_path);
+            // Set the file metadata
+            setFileMetadata(new_file);
 
-            addFileToFolder(new_folder, new_file_node);
+            // Finally, add the file to the folder
+            addFileToFolder(folder, new_file);
         }
 
-        // If the current entry is a directory, recursively build it
+        // Case 2: current entry is a directory
         else if (S_ISDIR(file_info.st_mode))
         {
-            Folder* new_subfolder = recursivelyBuildFolderFromDisk(current_path);
-            addSubfolderToFolder(new_folder, new_subfolder);
+            // Recursively build the subfolder...
+            Folder* new_subfolder = recursivelyBuildFolder(current_entry_path, cache_free_space);
+
+            // ...and add it to the folder which is currently built
+            addSubfolderToFolder(folder, new_subfolder);
         }
 
         // Move to the next entry
         current_entry = readdir(directory);
     }
 
-    closedir(directory);
+    //free(current_entry_path);
+}
+
+Folder* recursivelyBuildFolder (const char* path, int* cache_free_space)
+{
+    // Open the pointed directory to browse it
+    DIR* directory = opendir(path);
+    if (directory == NULL)
+        handleErrorAndExit("opendir() failed in recursivelyBuildFolder()");
+
+    // Read the directory a first time, to count how many
+    // folders and regular files are there inside
+    int nb_files      = 0;
+    int nb_subfolders = 0;
+    countFilesAndFoldersInDirectory(directory, path, &nb_files, &nb_subfolders);
+
+    // Create an empty Folder structure
+    // printf("Creating new folder with %d file(s) and %d subfolder(s)...\n", nb_files, nb_subfolders);
+    char*   new_folder_name = extractLastNameOfPath(path);
+    Folder* new_folder      = createEmptyFolder(new_folder_name, nb_files, nb_subfolders);
+    
+    // Rewind the directory, and fill the Folder structure recursively
+    rewinddir(directory);
+    recursivelyFillFolder(directory, new_folder, path, cache_free_space);
+
+    // Finally, close the directory
+    int return_value = closedir(directory);
+    if (return_value < 0)
+        handleErrorAndExit("closedir() failed in recursivelyBuildFolder()");
+
     return new_folder;
 }
 
-// TODO: stop ignoring max size :)
-
 FileCache* buildCacheFromDisk (char* root_path, const int max_size)
 {
-    // Build the root folder recursively
-    Folder* root_folder = recursivelyBuildFolderFromDisk(root_path);
+    // Create a fresh, empty file cache
+    FileCache* new_cache = createEmptyFileCache(max_size);
 
-    FileCache* new_cache = createFileCache();
-    initFileCache(new_cache, root_folder, max_size);
+    // Build the root folder recursively
+    int cache_free_space = max_size;
+    Folder* root_folder = recursivelyBuildFolder(root_path, &cache_free_space);
+
+    // Set some cache fields
+    new_cache->root = root_folder;
+    new_cache->size = max_size - cache_free_space;
 
     return new_cache;
 }
 
 // -----------------------------------------------------------------------------
-// CACHE FETCHING
+// FILE FETCHING
 // -----------------------------------------------------------------------------
 
 // Find a subfolder in a given folder, thanks to its name
@@ -503,8 +626,8 @@ File* findFileInCache (const FileCache* cache, char* path)
     char* remaining_path = path;
 
     // Start by ignoring all leading '/'
-        while (remaining_path[0] == '/')
-            remaining_path++;
+    while (remaining_path[0] == '/')
+        remaining_path++;
 
     for (;;)
     {

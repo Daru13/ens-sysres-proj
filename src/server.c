@@ -8,6 +8,9 @@
 #include <sys/time.h>
 #include <poll.h>
 #include <netinet/in.h>
+#include <fcntl.h>
+#include <sys/sendfile.h>
+#include <errno.h>
 #include "toolbox.h"
 #include "http.h"
 #include "file_cache.h"
@@ -217,8 +220,9 @@ void deleteServer (Server* server)
     // Delete the parameters structure
     free(server->parameters);
 
-    // Delete the file cache
-    deleteFileCache(server->cache);
+    // Delete the file cache, if any
+    if (server->cache != NULL)
+        deleteFileCache(server->cache);
 
     // FInallu delete the main structure
     free(server);
@@ -235,13 +239,11 @@ void initServer (Server* server, const int sockfd, const struct sockaddr_in addr
     server->is_started = false;
 
     // ...and it has no client yet
-    server->clients = NULL;
-
-    // ...nor it has any cached file
-    server->cache = NULL;
-
+    server->clients    = NULL;
     server->nb_clients = 0;
-    server->max_fd     = sockfd;
+
+    // ...nor has it any file cache
+    server->cache = NULL;
 }
 
 // Initialize a server with default values
@@ -274,7 +276,6 @@ void printServer (const Server* server)
     printf("sockfd    : %d\n", server->sockfd);
     printf("is started: %s\n", server->is_started ? "true" : "false");
     printf("nb_clients: %d\n", server->nb_clients);
-    printf("max_fd    : %d\n", server->max_fd);
     printf("\n");
 
     Client* current_client = server->clients;
@@ -300,7 +301,7 @@ void startServer (Server* server)
 
     // Load the files in the cache
     server->cache = buildCacheFromDisk(server->parameters->root_data_directory,
-                                       320000000);
+                                       32 * 1 /* 32 Mb */);
     printFileCache(server->cache); // TODO: Debug/improve
 
     // Attach the local adress to the socket, and make it a listener
@@ -334,11 +335,6 @@ void addClientToServer (Server* server, Client* client)
         // It thus becomes the "first" pointed client
         server->clients = client;
     }
-
-    // Check if the new client has the (new) highest file descriptor
-    int client_fd = client->fd;
-    if (client_fd > server->max_fd)
-        server->max_fd = client_fd;
 
     // Increment the number of clients
     (server->nb_clients)++;
@@ -455,17 +451,24 @@ bool writeHttpHeaderToClient (Client* client)
     printf("(HEAD) Writing up to %lu bytes to client %d...\n",
            strlen(client->answer_header_buffer), client->fd);
 
-    int remaining_bytes_to_write = client->answer_header_buffer_length
-                                 - client->answer_header_buffer_offset;
-    int nb_bytes_write = write(client->fd, client->answer_header_buffer,
-                               remaining_bytes_to_write);
+    int nb_bytes_to_send = client->answer_header_buffer_length
+                         - client->answer_header_buffer_offset;
+    int nb_bytes_sent = write(client->fd, client->answer_header_buffer,
+                              nb_bytes_to_send);
+    if (nb_bytes_sent < 0)
+    {
+        if (errno == ECONNRESET)
+            return true;
+        else
+            handleErrorAndExit("write() failed in writeHttpHeaderToClient()");
+    }
 
     // Debug printing
-    printSubtitle("***** (HEAD) Buffer content below (%d bytes) *****\n", nb_bytes_write);
-    printf("%.*s\n", nb_bytes_write, client->answer_header_buffer);
+    printSubtitle("***** (HEAD) Buffer content below (%d bytes) *****\n", nb_bytes_sent);
+    printf("%.*s\n", nb_bytes_sent, client->answer_header_buffer);
 
     // Update the header buffer offset
-    client->answer_header_buffer_offset += nb_bytes_write;
+    client->answer_header_buffer_offset += nb_bytes_sent;
 
     return client->answer_header_buffer_offset
         == client->answer_header_buffer_length;
@@ -477,30 +480,67 @@ bool writeHttpContentToClient (Client* client)
 {
     HttpContent* answer_content = client->http_answer->content;
 
-    // There is no body to write if its content is NULL
-    // In such a case, we assume the body has been written (by returning true)
-    if (answer_content->body == NULL)
+    int nb_bytes_to_send = answer_content->length - answer_content->offset;
+    int nb_bytes_sent    = 0;
+
+    // If content is loaded and not NULL, directly read it from the body buffer
+    if (answer_content->content_is_loaded)
     {
-        // printf("\nNO BODY WAS FOUND: NO CONTENT TO SEND...\n");
-        return true;
+        // If there is no body content (= NULL), immediately return true
+        if (answer_content->body == NULL)
+            return true;
+
+        // Write the body data on the socket
+        nb_bytes_to_send = answer_content->length - answer_content->offset;
+        printf("(BODY) Writing up to %d bytes to client %d...\n",
+               nb_bytes_to_send, client->fd);
+
+        int nb_bytes_sent = write(client->fd, answer_content->body,
+                                   nb_bytes_to_send);
+        if (nb_bytes_sent < 0)
+        {
+            if (errno == ECONNRESET)
+                return true;
+            else
+                handleErrorAndExit("write() failed in writeHttpContentToClient()");
+        }
+
+        return answer_content->offset == answer_content->length;
     }
     
-    // Write the body data on the socket
-    int remaining_bytes_to_write = answer_content->length - answer_content->offset;
-    printf("(BODY) Writing up to %d bytes to client %d...\n",
-           remaining_bytes_to_write, client->fd);
+    // Otherwise, use sendfile() to send content located at the given path
+    else
+    {
+        // If there is no path (= NULL), immediately return true
+        if (answer_content->file_path == NULL)
+            return true;
 
-    int nb_bytes_write = write(client->fd, answer_content->body,
-                               remaining_bytes_to_write);
+        // Open the file, and save the file descriptor until it's fully written
+        answer_content->file_fd = open(answer_content->file_path, O_RDONLY);
+        if (answer_content->file_fd < 0)
+            handleErrorAndExit("open() failed in writeHttpContentToClient()");
 
-    // Debug printing
-    printSubtitle("***** (BODY) Buffer content below (%d bytes) *****\n", nb_bytes_write);
-    printf("%.*s\n", nb_bytes_write, answer_content->body);
+        nb_bytes_sent = sendfile(client->fd, answer_content->file_fd, &(answer_content->file_offset),
+                                 answer_content->length - answer_content->offset);
+        if (nb_bytes_sent < 0 && errno != ECONNRESET)
+            handleErrorAndExit("write() failed in writeHttpContentToClient()");
+
+        // Once the file is fully sent, close it
+        if (client->answer_header_buffer_offset == client->answer_header_buffer_length
+        || (nb_bytes_sent < 0 && errno == ECONNRESET))
+        {
+            int return_value = close(answer_content->file_fd);
+            if (return_value < 0)
+                handleErrorAndExit("close() failed in writeHttpContentToClient()");
+            answer_content->file_fd = NO_FD;
+        }
+    }
 
     // Update the message body offset
-    answer_content->offset += nb_bytes_write;
+    answer_content->offset += nb_bytes_sent;
 
-    return answer_content->offset == answer_content->length;
+    return client->answer_header_buffer_offset
+        == client->answer_header_buffer_length;
 }
 
 // This function assumes the answer message is correctly filled
@@ -512,10 +552,7 @@ void writeToClient (Server* server, Client* client)
     // In a second time, if the header has been sent, send the HTTP body data
     bool body_is_sent = false;
     if (header_is_sent)
-    {
-        printf("\nNOW SENDING BODY DATA :)!\n\n");
         body_is_sent = writeHttpContentToClient(client);    
-    }
 
     // If the whole HTTP answer has been sent (header + body),
     // the server is done answering the client, and waits for new requets from it
@@ -526,24 +563,6 @@ void writeToClient (Server* server, Client* client)
 // -----------------------------------------------------------------------------
 // MAIN SERVER LOOP : WAITING FOR CLIENTS AND REQUESTS, AND ANSWERING THEM
 // -----------------------------------------------------------------------------
-
-/* TODO: READ AND WRITE DELEGATE TO PROCESSES/THREADS/ETC?
- *
- * it may be an interesting idea to delegate read and write operations to
- * threads (for instance), so it doesn't block the current process to keep
- * listening to sockets/answering more requests in "parallel"?
- *
- * However, we are still limited by the network interface (i.e. if several
- * threads try to read or write from different sockets, will they likely be
- * paused and only processed one after another ; is there any advantage in
- * doing this...?)
- *
- * There may also be interesting flags to use, to reduce/avoid
- * such issues/latency!
- *
- * This should be discussed at some point, even though this is not important
- * at the current time :).
- */
 
 void handleClientRequests (Server* server)
 {
@@ -617,9 +636,9 @@ void handleClientRequests (Server* server)
             // In case of current client's deletion, next one must be saved now,
             // so that the lopping proprely continue even if it is deleted
             Client* next_client = current_client->next;
-            printf("*** Polling check ***\ncurrent_client: %p\nnext_client: %p\nhandled/ready: %d/%d\n\n",
+/*            printf("*** Polling check ***\ncurrent_client: %p\nnext_client: %p\nhandled/ready: %d/%d\n\n",
                 (void*) current_client, (void*) next_client, nb_handled_sockets, nb_ready_sockets);
-
+*/
             current_state = current_client->state;
 
             // Check if the client closed the socket (meaning it should be removed)

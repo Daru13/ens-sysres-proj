@@ -2,9 +2,7 @@
 #define __H_FILE_CACHE__
 
 #include <stdbool.h>
-
-// Structures representing files and folders
-// in order to cache them in memory
+#include <dirent.h>
 
 typedef enum FileState {
     STATE_NOT_LOADED,
@@ -12,15 +10,26 @@ typedef enum FileState {
     STATE_LOADED_COMPRESSED
 } FileState;
 
+typedef enum FileEncoding {
+    ENCODING_GZIP,
+    ENCODING_NONE
+} FileEncoding;
+
+// Structures representing files and folders
+// in order to cache them in memory
+
 typedef struct File {
     char*     name;
+    char*     path;
     FileState state;
 
     char* content;
     int   size;
 
-    char* type;     // MIME type
-    char* encoding; // Compression format (possibly NO_ENCODING)
+    bool  must_unload;
+
+    char*        type;     // MIME type
+    FileEncoding encoding; // Compression format
 } File;
 
 typedef struct Folder {
@@ -54,7 +63,6 @@ typedef struct FileCache {
 #define MIN_FILE_SIZE_FOR_GZIP   64 // bytes
 
 #define NOT_FOUND                NULL
-#define NO_ENCODING              NULL
 
 // -----------------------------------------------------------------------------
 
@@ -75,13 +83,24 @@ int addFileToFolder (Folder* folder, File* file);
 int addSubfolderToFolder (Folder* folder, Folder* subfolder);
 
 FileCache* createFileCache ();
-bool initFileCache (FileCache* cache, Folder* root, const int max_size);
+bool initFileCache (FileCache* cache, const int max_size);
+FileCache* createEmptyFileCache (const int max_size);
 void deleteFileCache (FileCache* cache);
 void printFileCache (const FileCache* cache);
 
-void setFileType (File* file, char* path);
-void compressFile (File* file, char* path);
-Folder* recursivelyBuildFolderFromDisk (char* path);
+void setFileType (File* file);
+void setRawFileContent (File* file);
+void setCompressedFileContent (File* file);
+void removeFileContent (File* file);
+bool setFileContent (File* file, const int cache_free_space);
+void setFileMetadata (File* file);
+
+bool filenameIsSpecial (const char* filename);
+void countFilesAndFoldersInDirectory (DIR* directory, const char* current_folder_path,
+                                      int* nb_files, int* nb_subfolders);
+void recursivelyFillFolder (DIR* directory, Folder* folder, const char* current_folder_path,
+                            int* cache_free_space);
+Folder* recursivelyBuildFolder (const char* path, int* cache_free_space);
 FileCache* buildCacheFromDisk (char* root_path, const int max_size);
 
 Folder* findSubfolderInFolder (const Folder* folder, const char* subfolder_name);

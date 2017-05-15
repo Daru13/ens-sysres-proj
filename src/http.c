@@ -88,6 +88,11 @@ void initEmptyHttpContent (HttpContent* content)
     content->length = 0;
     content->offset = 0;
     content->body   = NULL;
+
+    content->content_is_loaded = false;
+    content->file_path         = NULL;
+    content->file_fd           = NO_FD;
+    content->file_offset       = 0;
 }
 
 // -----------------------------------------------------------------------------
@@ -252,7 +257,7 @@ void prepareHttpValidAnswer (HttpMessage* request, HttpMessage* answer, File* fi
     // Set header fields
     answer->header->content_length   = file->size;
     answer->header->content_type     = file->type;
-    answer->header->content_encoding = file->state == STATE_LOADED_COMPRESSED
+    answer->header->content_encoding = file->encoding == ENCODING_GZIP
                                      ? "gzip"
                                      : "identity";
 
@@ -260,8 +265,19 @@ void prepareHttpValidAnswer (HttpMessage* request, HttpMessage* answer, File* fi
     // Curently, only GET and HEAD are supported
     if (request->header->method == HTTP_GET)
     {
-        answer->content->length = file->size;
-        answer->content->body   = file->content;
+        // If file content is not loaded, the server must know it, and use the path
+        if (file->state == STATE_NOT_LOADED)
+        {
+            answer->content->length            = file->size;
+            answer->content->file_path         = file->path;
+            answer->content->content_is_loaded = false;
+        }
+        else
+        {
+            answer->content->length            = file->size;
+            answer->content->body              = file->content;
+            answer->content->content_is_loaded = true;
+        }
     }
 }
 

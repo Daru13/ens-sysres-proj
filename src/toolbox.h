@@ -52,6 +52,8 @@ void printError (const char* format, ...);
 void printWarning (const char* format, ...);
 
 bool stringsAreEqual (const char* string_1, const char* string_2);
-char* extractDirectoryNameFromPath (const char* path);
+char* getFreshStringCopy (const char* source_string);
+char* extractLastNameOfPath (const char* path);
+bool appendNameToPath (char* path, const char* name, const int path_max_length);
 
 #endif

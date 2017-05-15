@@ -138,7 +138,7 @@ void printWarning (const char* format, ...)
 }
 
 // -----------------------------------------------------------------------------
-// STRING-RELATED FUNCTIONS
+// STRING AND PATHS-RELATED FUNCTIONS
 // -----------------------------------------------------------------------------
 
 bool stringsAreEqual (const char* string_1, const char* string_2)
@@ -146,7 +146,16 @@ bool stringsAreEqual (const char* string_1, const char* string_2)
     return strcmp(string_1, string_2) == 0;
 }
 
-char* extractDirectoryNameFromPath (const char* path)
+char* getFreshStringCopy (const char* source_string)
+{
+    char* string_copy = malloc((strlen(source_string) + 1) * sizeof(char));
+    if (string_copy == NULL)
+        handleErrorAndExit("malloc() failed in getFreshStringCopy()");
+    
+    return strcpy(string_copy, source_string);
+}
+
+char* extractLastNameOfPath (const char* path)
 {  
     // Find the last '/' character position
     int last_slash_index = 0;
@@ -167,4 +176,24 @@ char* extractDirectoryNameFromPath (const char* path)
     directory_name = strcpy(directory_name, path + last_slash_index + 1);
 
     return directory_name;
+}
+
+// Note: this function does not return a new string, but modify the path argument instead
+// Return true if the name fits, false otherwise (in which case, nothing happens)
+bool appendNameToPath (char* path, const char* name, const int path_max_length)
+{
+    int name_length = strlen(name);
+    int path_length = strlen(path);
+
+    bool path_ends_with_slash = path[path_length - 1] == '/'; 
+    
+    int new_path_length = path_length + name_length + (path_ends_with_slash ? 0 : 1);
+    if (new_path_length - 1 > path_max_length)
+        return false;
+
+    sprintf(path + path_length, "%s%s",
+            path_ends_with_slash ? "" : "/",
+            name);
+
+    return true;
 }

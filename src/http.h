@@ -1,6 +1,7 @@
 #ifndef __H_HTTP__
 #define __H_HTTP__
 
+#include <sys/types.h>
 #include "file_cache.h"
 
 // Useful, finite types related to HTTP
@@ -76,6 +77,13 @@ typedef struct HttpContent {
     int   length;
     int   offset;
     char* body;
+
+    // In case the content is not in memory
+    bool  content_is_loaded;
+
+    char* file_path;
+    int   file_fd;
+    off_t file_offset;
 } HttpContent;
 
 // Struture represeting a full HTTP message
@@ -88,6 +96,8 @@ typedef struct HttpMessage {
 
 #define HTTP_TIME_FORMAT_STR "%a, %d %b %Y %X GMT"
 #define HTTP_SERVER_VERSION  "HTTP/1.1"
+
+#define NO_FD -1
 
 // -----------------------------------------------------------------------------
 

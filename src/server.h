@@ -60,7 +60,6 @@ typedef struct Server {
 
     Client*            clients;
     int                nb_clients;
-    int                max_fd;
 
     FileCache* cache;
 
