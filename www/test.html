@@ -1,14 +1,78 @@
 <!DOCTYPE html>
 <html lang="fr">
 	<head>
-		<title>Page de test</title>
+		<meta charset="utf-8">
+		<title>Page de test pour le serveur web - (c) Camille G.</title>
+
+		<style type="text/css">
+			html {
+				font-family: sans-serif;
+			}
+
+			body {
+				padding: 0 0 0 0;
+			}
+
+			#main_container {
+				margin: 42px;
+			}
+
+			p {
+				margin: 0 0 20px 0;
+			}
+
+			strong {
+				text-decoration: none;
+				font-weight: bold;
+			}
+
+			a {
+				text-decoration: none;
+				color: darkorange;
+				transition; 200ms ease-in;
+			}
+
+			a:hover {
+				font-decoration: underline;
+				color: darkred;
+			}
+
+			#main_image {
+				margin: 20px 0;
+				border: none;
+			}
+
+			#main_button {
+				position: absolute;
+				bottom: 50px;
+				right: 50px;
+				width: 150px;
+				height: 65px;
+				font-size: 0.85rem;
+			}
+
+			#you_lost {
+				display: block;
+				position: fixed;
+				background-color: black;
+				color: white;
+				font-size: 1.5rem;
+			}
+		</style>
 	</head>
 	<body>
-		<p>Paragraphe de test :) !</p>
-		<h3>Btw, you lost!</h3>
-		<a href="b">Cliquez-ici pour télécharger le fichier 'b'...</a>
-		<img alt="WAT?" src="what.jpg" />
-		<a href="6M_earth.jpg">Cliquez-ici pour une image de 6Mo !</a>
-	</body>
-</html>
+		<div id="main_container">
+			<p>Ceci est un paragraphe de test ! Vous pouvez également essayer une autre page du site en <a href="autre_page.html">cliquant ici</a>.</p>
 
+			<a href="img/6M_earth.jpg">Cliquez-ici pour <strong>une image de la Terre pesant plus de 6Mo</strong> !</a><br/>
+			<a href="text/lorem1.txt">Cliquez-ici pour télécharger le fichier texte <strong>lorem1.txt</strong></a><br/>
+			
+			<img id="main_image" alt="WAT?" src="img/what.jpg" />
+
+			<button id="main_button" type="button">Ne cliquez pas, malheureu-x-se !</button>
+		</div>
+	</body>
+
+	<script src="js/jquery-3.2.1.min.js"></script>
+	<script src="js/test.js"></script>
+</html>

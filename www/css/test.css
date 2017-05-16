@@ -1,0 +1,52 @@
+html {
+	font-family: sans-serif;
+}
+
+body {
+	padding: 0 0 0 0;
+}
+
+#main_container {
+	margin: 42px;
+}
+
+p {
+	margin: 0 0 20px 0;
+}
+
+strong {
+	text-decoration: none;
+	font-weight: bold;
+}
+
+a {
+	text-decoration: none;
+	color: orange;
+	transition; 80ms ease-in;
+}
+
+a:hover {
+	font-weight: bold;
+}
+
+#main_image {
+	margin: 20px 0;
+	border: none;
+}
+
+#main_button {
+	position: absolute;
+	bottom: 50px;
+	right: 50px;
+	width: 150px;
+	height: 65px;
+	font-size: 0.85rem;
+}
+
+#you_lost {
+	display: block;
+	position: fixed;
+	background-color: black;
+	color: white;
+	font-size: 1.5rem;
+}
