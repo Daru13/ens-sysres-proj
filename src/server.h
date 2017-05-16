@@ -50,6 +50,7 @@ typedef struct ServParameters {
     int   request_buffer_size;
     int   answer_header_buffer_size;
     char* root_data_directory;
+    int   cache_max_size;
     // ...
 } ServParameters;
 
@@ -75,6 +76,7 @@ typedef struct Server {
 #define SERV_DEFAULT_MAX_NB_CLIENTS      64 
 #define SERV_DEFAULT_REQUEST_BUF_SIZE    16384 // bytes
 #define SERV_DEFAULT_ANS_HEADER_BUF_SIZE 2048  // bytes
+#define SERV_DEFAULT_CACHE_MAX_SIZE      3200000 // bytes
 
 #define SERV_DEFAULT_ROOT_DATA_DIR    "./www"
 
@@ -114,8 +116,8 @@ Client* acceptNewClient (Server* server);
 
 void readFromClient (Server* server, Client* client);
 void processClientRequest (Server* server, Client* client);
-bool writeHttpHeaderToClient (Client* client);
-bool writeHttpContentToClient (Client* client);
+bool writeHttpHeaderToClient (Server* server, Client* client);
+bool writeHttpContentToClient (Server* server, Client* client);
 void writeToClient (Server* server, Client* client);
 
 void handleClientRequests (Server* server);

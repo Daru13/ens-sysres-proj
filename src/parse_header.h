@@ -3,6 +3,9 @@
 
 #include "http.h"
 
-HttpCode fillHttpHeaderWith (HttpHeader* header, char* buffer);
+bool bufferContainsFullHttpHeader (const char* buffer, const int start_offset, const int content_length);
+
+HttpCode parseHttpHeaderFirstLine (HttpHeader* header, char* buffer);
+//HttpCode fillHttpHeaderWith (HttpHeader* header, char* buffer);
 
 #endif

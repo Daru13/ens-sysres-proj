@@ -239,7 +239,8 @@ void deleteFileCache (FileCache* cache)
 
 void printFileCache (const FileCache* cache)
 {
-    printSubtitle("________________ FILE CACHE ________________");
+    printf("\n");
+    printTitle("FILE CACHE");
     printf("\nUsed memory: %.2f/%.2f kb (%3.1f%%)\n\n",
            ((float) cache->size) / 1000, ((float) cache->max_size) / 1000,
            (((float) cache->size) / ((float) cache->max_size)) * 100.0);

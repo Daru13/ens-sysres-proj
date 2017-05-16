@@ -1,6 +1,6 @@
 # Makefile for Systèmes et Réseau (16-17)'s course projet : web server.
 CC = clang
-CCFLAGS = -g -W -Wall -pedantic -std=c99
+CCFLAGS = -g -O2 -W -Wall -pedantic -std=c99
 
 ##### THIS LIST MUST BE UPDATED #####
 # List of all  object files which must be produced before any binary
@@ -15,12 +15,12 @@ server: $(OBJS)
 build/main.o: src/main.c src/main.h src/server.h src/toolbox.h
 	$(CC) $(CCFLAGS) -c src/main.c -o build/main.o
 
-build/server.o: src/server.c src/server.h src/http.h src/file_cache.h src/toolbox.h
+build/server.o: src/server.c src/server.h src/http.h src/file_cache.h src/parse_header.h src/toolbox.h
 	$(CC) $(CCFLAGS) -c src/server.c -o build/server.o
 
 src/server.h: src/http.h
 
-build/parse_header.o: src/parse_header.c src/parse_header.h src/http.h src/http.h src/toolbox.h
+build/parse_header.o: src/parse_header.c src/parse_header.h src/http.h src/file_cache.h src/toolbox.h
 	$(CC) $(CCFLAGS) -c src/parse_header.c -o build/parse_header.o
 
 src/parse_header.h: src/http.h

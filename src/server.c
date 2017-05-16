@@ -14,6 +14,7 @@
 #include "toolbox.h"
 #include "http.h"
 #include "file_cache.h"
+#include "parse_header.h"
 #include "server.h"
 
 // -----------------------------------------------------------------------------
@@ -168,12 +169,12 @@ void printClient (const Client* client)
         client->answer_header_buffer_length, client->answer_header_buffer_offset);
     printf("| answer body  : ofs = %d, length = %d\n",
         client->http_answer->content->offset, client->http_answer->content->length);
-    printf("| request: target = %s, method = %s, code = %d\n",
+    printf("| request      : target = %s, method = %s, code = %d\n",
            client->http_request->header->requestTarget != NULL ?
            client->http_request->header->requestTarget : "",
            getHttpMethodAsString(client->http_request->header->method),
            getHttpCodeValue(client->http_request->header->code));
-    printf("| answer: method = %s, code = %d, content_length = %d\n",
+    printf("| answer       : method = %s, code = %d, content_length = %d\n",
            getHttpMethodAsString(client->http_answer->header->method),
            getHttpCodeValue(client->http_answer->header->code),
            client->http_answer->content->length);
@@ -224,7 +225,7 @@ void deleteServer (Server* server)
     if (server->cache != NULL)
         deleteFileCache(server->cache);
 
-    // FInallu delete the main structure
+    // Finally delete the main structure
     free(server);
 }
 
@@ -261,6 +262,7 @@ void defaultInitServer (Server* server)
     parameters->request_buffer_size       = SERV_DEFAULT_REQUEST_BUF_SIZE;
     parameters->answer_header_buffer_size = SERV_DEFAULT_ANS_HEADER_BUF_SIZE;
     parameters->root_data_directory       = SERV_DEFAULT_ROOT_DATA_DIR;
+    parameters->cache_max_size            = SERV_DEFAULT_CACHE_MAX_SIZE;
 
     initServer(server, sockfd, address, parameters);
 }
@@ -272,7 +274,8 @@ bool serverIsStarted (const Server* server)
 
 void printServer (const Server* server)
 {
-    printSubtitle("[Server]");
+    printf("\n");
+    printTitle("SERVER");
     printf("sockfd    : %d\n", server->sockfd);
     printf("is started: %s\n", server->is_started ? "true" : "false");
     printf("nb_clients: %d\n", server->nb_clients);
@@ -301,8 +304,8 @@ void startServer (Server* server)
 
     // Load the files in the cache
     server->cache = buildCacheFromDisk(server->parameters->root_data_directory,
-                                       32 * 1 /* 32 Mb */);
-    printFileCache(server->cache); // TODO: Debug/improve
+                                       server->parameters->cache_max_size);
+    printFileCache(server->cache);
 
     // Attach the local adress to the socket, and make it a listener
     bindWebSocket(server->sockfd, &server->address);
@@ -399,9 +402,11 @@ void readFromClient (Server* server, Client* client)
     // Read data from the socket, and null-terminate the buffer
     printf("Reading up to %d bytes from client %d...\n",
            server->parameters->request_buffer_size - 1, client->fd);
-    int nb_bytes_read = read(client->fd, client->request_buffer,
-                             server->parameters->request_buffer_size - 1);
-    client->request_buffer[nb_bytes_read] = '\0';
+    int nb_bytes_read = read(client->fd,
+                             client->request_buffer + client->request_buffer_offset,
+                             server->parameters->request_buffer_size - client->request_buffer_length - 1);
+    client->request_buffer[client->request_buffer_offset + nb_bytes_read] = '\0';
+    client->request_buffer_length += nb_bytes_read;
 
     // Debug printing
     printf("***** Buffer content below (%d bytes) *****\n", nb_bytes_read);
@@ -424,7 +429,17 @@ void processClientRequest (Server* server, Client* client)
 {
     client->state = STATE_PROCESSING_REQUEST;
 
-    // TODO: start by checking whether the request is complete or not?
+    // TODO: check it more thoroughly (what about body, etc)
+    // Check whether the header has been fully received
+    if (! bufferContainsFullHttpHeader(client->request_buffer,
+                                       client->request_buffer_offset,
+                                       client->request_buffer_length))
+    {
+        printf("Header is incomplete: reading more...\n");
+
+        client->state = STATE_WAITING_FOR_REQUEST;
+        return;
+    }
 
     // Step 1: analyze the request
     HttpCode http_code = parseHttpRequest(client->http_request, client->request_buffer);
@@ -445,7 +460,7 @@ void processClientRequest (Server* server, Client* client)
 
 // Only write the HTTP header buffer on the socket
 // Returns true if the buffer has been entirely written, false otherwise
-bool writeHttpHeaderToClient (Client* client)
+bool writeHttpHeaderToClient (Server* server, Client* client)
 {
     // Write the header data on the socket
     printf("(HEAD) Writing up to %lu bytes to client %d...\n",
@@ -458,7 +473,10 @@ bool writeHttpHeaderToClient (Client* client)
     if (nb_bytes_sent < 0)
     {
         if (errno == ECONNRESET)
-            return true;
+        {
+            removeClientFromServer(server, client);
+            return false;
+        }
         else
             handleErrorAndExit("write() failed in writeHttpHeaderToClient()");
     }
@@ -476,7 +494,7 @@ bool writeHttpHeaderToClient (Client* client)
 
 // Only write the HTTP body on the socket (or nothing if the content is NULL)
 // Returns true if the buffer has been entirely written, false otherwise
-bool writeHttpContentToClient (Client* client)
+bool writeHttpContentToClient (Server* server, Client* client)
 {
     HttpContent* answer_content = client->http_answer->content;
 
@@ -500,7 +518,10 @@ bool writeHttpContentToClient (Client* client)
         if (nb_bytes_sent < 0)
         {
             if (errno == ECONNRESET)
-                return true;
+            {
+                removeClientFromServer(server, client);
+                return false;
+            }
             else
                 handleErrorAndExit("write() failed in writeHttpContentToClient()");
         }
@@ -532,7 +553,9 @@ bool writeHttpContentToClient (Client* client)
             int return_value = close(answer_content->file_fd);
             if (return_value < 0)
                 handleErrorAndExit("close() failed in writeHttpContentToClient()");
-            answer_content->file_fd = NO_FD;
+
+            removeClientFromServer(server, client);
+            return false;
         }
     }
 
@@ -547,12 +570,12 @@ bool writeHttpContentToClient (Client* client)
 void writeToClient (Server* server, Client* client)
 {
     // In a first time, send the HTTP header data
-    bool header_is_sent = writeHttpHeaderToClient(client);
+    bool header_is_sent = writeHttpHeaderToClient(server, client);
 
     // In a second time, if the header has been sent, send the HTTP body data
     bool body_is_sent = false;
     if (header_is_sent)
-        body_is_sent = writeHttpContentToClient(client);    
+        body_is_sent = writeHttpContentToClient(server, client);    
 
     // If the whole HTTP answer has been sent (header + body),
     // the server is done answering the client, and waits for new requets from it

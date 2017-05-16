@@ -287,12 +287,15 @@ void prepareHttpValidAnswer (HttpMessage* request, HttpMessage* answer, File* fi
 
 // Parse a HTTP request from a buffer, and set the various fields of the given HttpMessage
 // Return the HTTP code of the answer to produce
+
 HttpCode parseHttpRequest (HttpMessage* request, char* buffer)
 {
     // Clear the request message structure
     initRequestHttpMessage(request);
 
-    int http_code = fillHttpHeaderWith(request->header, buffer);
+    int http_code = parseHttpHeaderFirstLine(request->header, buffer);
+    // TODO: handle the rest of the header
+    // TODO: handle more of HTTP 1.1
     // TODO: handle body data
 
     return http_code;
@@ -301,8 +304,6 @@ HttpCode parseHttpRequest (HttpMessage* request, char* buffer)
 // Produce a HTTP answer from a parsed request
 void produceHttpAnswerFromRequest (HttpMessage* answer, HttpMessage* request, FileCache* cache)
 {
-    // TODO: use a better semantic for request parsing errors
-
     // If there has been an error while parsing the request, produce an error message
     if (request->header->code != HTTP_200)
     {

@@ -55,5 +55,7 @@ bool stringsAreEqual (const char* string_1, const char* string_2);
 char* getFreshStringCopy (const char* source_string);
 char* extractLastNameOfPath (const char* path);
 bool appendNameToPath (char* path, const char* name, const int path_max_length);
+char* consumeLeadingStringWhiteSpace (char* string);
+char* convertStringToUppercase (char* string);
 
 #endif

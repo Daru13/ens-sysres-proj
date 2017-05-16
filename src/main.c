@@ -1,41 +1,41 @@
-// Weird workaround for having all signal handling tools we need
-//#define _POSIX_C_SOURCE 200809L
+// Macro definitions for using some recent signal handling functions
+// #define _POSIX_C_SOURCE 200809L
 #define _POSIX_SOURCE
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 #include "toolbox.h"
 #include "server.h"
 #include "main.h"
 
-#include <signal.h>
+// -----------------------------------------------------------------------------
+
+// The main server is in a global variables, so atexit's functions can access it
+Server* _main_server = NULL;
 
 // -----------------------------------------------------------------------------
 
-Server* server = NULL;
-
-// To improve!
 void cleanClosing ()
 {
-    printf("Now cleaning and closing the server...\n");
-    if (server != NULL)
-        deleteServer(server);
+    if (_main_server != NULL)
+    {
+        printf("Now cleaning and closing the server...\n");
+        deleteServer(_main_server);
+    }
 
-    server = NULL;
+    _main_server = NULL;
     printf("Cleaning done, goodbye!\n");
 }
 
 void handleSIGINT (int signal_id)
 {
-    printf("Signal SIGINT received!\n");
+    // printf("Signal SIGINT received!\n");
     exit(EXIT_SUCCESS);
 }
 
-int main (const int argc, const char* argv[])
+void installSIGINTHandler ()
 {
-    // If there is a server, disconnect and close it at exit
-    atexit(cleanClosing);
-
     // Handle SIGINT, to exit the program when received
     struct sigaction sigint_handler;
 
@@ -48,14 +48,26 @@ int main (const int argc, const char* argv[])
 
     int success = sigaction(SIGINT, &sigint_handler, NULL);
     if (success < 0)
-        handleErrorAndExit("sigaction() failed in main()");
+        handleErrorAndExit("sigaction() failed in installSIGINTHandler()");
+}
+
+int main (/*const int argc, const char* argv[]*/)
+{
+    // If there is a server, disconnect and close it at exit
+    atexit(cleanClosing);
+
+    // Handle SIGINT signal for clean server closing
+    installSIGINTHandler();
 
     // Create, start and run the server
-    server = createServer();
-    defaultInitServer(server);
-    startServer(server);
+    _main_server = createServer();
+    defaultInitServer(_main_server);
+    startServer(_main_server);
 
-    handleClientRequests(server);
+    printServer(_main_server);
+
+    // Start the main server loop
+    handleClientRequests(_main_server);
 
     return 0;
 }

@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <ctype.h>
 #include "toolbox.h"
 
 // -----------------------------------------------------------------------------
@@ -196,4 +197,22 @@ bool appendNameToPath (char* path, const char* name, const int path_max_length)
             name);
 
     return true;
+}
+
+// Remove all the leading white space (' ')
+char* consumeLeadingStringWhiteSpace (char* string)
+{
+    while (string[0] == ' ')
+        string++;
+
+    return string;
+}
+
+char* convertStringToUppercase (char* string)
+{
+    int index = 0;
+    while (string[index] != '\0')
+        string[index] = toupper(string[index]);
+
+    return string;
 }
