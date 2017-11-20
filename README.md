@@ -11,7 +11,6 @@ The server expects a Unix-like environment, and the cache uses `file` and `gzip`
 #### Compiling
 Run `make` in the root directory to build the server.
 The resulting `webserver` binary will be placed into the `build` directory.
-
 Run `make clean` to remove built files.
 
 #### Starting the server
@@ -38,4 +37,5 @@ However, it has been coded with more advanced features in mind, like:
 * A better support of the HTTP/1.1 norm;
 * Sharing HTTP message processing between threads;
 * A dynamic caching policy).
+
 But we did not have time to implement them all.
